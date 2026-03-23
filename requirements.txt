@@ -6,3 +6,4 @@ requests
 prometheus-client
 python-json-logger
 pytest
+maxminddb

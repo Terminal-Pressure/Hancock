@@ -14,10 +14,10 @@ The ``RequestIdFilter`` can be attached to Flask via ``before_request`` /
 automatically carries the request-ID without explicit passing.
 """
 
+import datetime
 import json
 import logging
 import threading
-import time
 import uuid
 
 _local = threading.local()
@@ -53,10 +53,12 @@ class JsonFormatter(logging.Formatter):
     RESERVED = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__)
 
     def format(self, record):
+        ts = datetime.datetime.fromtimestamp(
+            record.created, tz=datetime.timezone.utc
+        )
         payload = {
-            "timestamp": time.strftime(
-                "%Y-%m-%dT%H:%M:%S", time.gmtime(record.created)
-            ) + f".{int(record.msecs):03d}Z",
+            "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%S.")
+            + f"{ts.microsecond // 1000:03d}Z",
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

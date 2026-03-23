@@ -1059,7 +1059,8 @@ def build_app(client, model: str):
             mapping = mapper.map_infrastructure(indicators)
             return jsonify(mapping)
         except Exception as exc:
-            _inc("errors_total"); return jsonify({"error": str(exc)}), 500
+            logger.exception("Error in /v1/map-infrastructure endpoint: %s", exc)
+            _inc("errors_total"); return jsonify({"error": "Internal server error"}), 500
 
     return app  # ← returned for testing
 

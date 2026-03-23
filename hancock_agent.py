@@ -960,50 +960,59 @@ def _send_notification(source: str, severity: str, alert: str, triage: str):
     """Send triage result to Slack or Teams webhook (if configured via env vars)."""
     import urllib.request
     import urllib.error
+    import urllib.parse
 
     slack_url = os.getenv("HANCOCK_SLACK_WEBHOOK", "")
     teams_url = os.getenv("HANCOCK_TEAMS_WEBHOOK", "")
     summary   = triage[:400] + "..." if len(triage) > 400 else triage
 
     if slack_url:
-        color = {"critical": "#ff3366", "high": "#ff9900", "medium": "#ffcc00"}.get(
-            severity.lower(), "#36a64f")
-        payload = json.dumps({
-            "attachments": [{
-                "color": color,
-                "title": f"🔔 Hancock Alert — {source.upper()} [{severity.upper()}]",
-                "text":  f"*Alert:* {alert[:200]}\n\n*Triage:* {summary}",
-                "footer": "CyberViser Hancock",
-            }]
-        }).encode()
-        try:
-            req = urllib.request.Request(slack_url, data=payload,
-                                         headers={"Content-Type": "application/json"})
-            urllib.request.urlopen(req, timeout=5)
-            logger.info("Slack webhook notification sent successfully")
-        except urllib.error.URLError as exc:
-            logger.warning("Failed to send Slack notification: %s", exc)
-        except Exception as exc:
-            logger.error("Unexpected error sending Slack notification: %s", exc)
+        # Enforce HTTPS-only scheme to prevent open-redirect / SSRF via file:/ or custom schemes
+        if urllib.parse.urlparse(slack_url).scheme != "https":
+            logger.error("Slack webhook URL must use HTTPS; notification skipped")
+        else:
+            color = {"critical": "#ff3366", "high": "#ff9900", "medium": "#ffcc00"}.get(
+                severity.lower(), "#36a64f")
+            payload = json.dumps({
+                "attachments": [{
+                    "color": color,
+                    "title": f"🔔 Hancock Alert — {source.upper()} [{severity.upper()}]",
+                    "text":  f"*Alert:* {alert[:200]}\n\n*Triage:* {summary}",
+                    "footer": "CyberViser Hancock",
+                }]
+            }).encode()
+            try:
+                req = urllib.request.Request(slack_url, data=payload,
+                                             headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=5)  # nosec B310 — scheme validated as https above
+                logger.info("Slack webhook notification sent successfully")
+            except urllib.error.URLError as exc:
+                logger.warning("Failed to send Slack notification: %s", exc)
+            except Exception as exc:
+                logger.error("Unexpected error sending Slack notification: %s", exc)
 
     if teams_url:
-        payload = json.dumps({
-            "@type": "MessageCard",
-            "@context": "https://schema.org/extensions",
-            "summary": f"Hancock Alert [{severity.upper()}]",
-            "themeColor": "FF3366",
-            "title": f"🔔 Hancock Alert — {source.upper()} [{severity.upper()}]",
-            "text": f"**Alert:** {alert[:200]}\n\n**Triage:** {summary}",
-        }).encode()
-        try:
-            req = urllib.request.Request(teams_url, data=payload,
-                                         headers={"Content-Type": "application/json"})
-            urllib.request.urlopen(req, timeout=5)
-            logger.info("Teams webhook notification sent successfully")
-        except urllib.error.URLError as exc:
-            logger.warning("Failed to send Teams notification: %s", exc)
-        except Exception as exc:
-            logger.error("Unexpected error sending Teams notification: %s", exc)
+        # Enforce HTTPS-only scheme to prevent open-redirect / SSRF via file:/ or custom schemes
+        if urllib.parse.urlparse(teams_url).scheme != "https":
+            logger.error("Teams webhook URL must use HTTPS; notification skipped")
+        else:
+            payload = json.dumps({
+                "@type": "MessageCard",
+                "@context": "https://schema.org/extensions",
+                "summary": f"Hancock Alert [{severity.upper()}]",
+                "themeColor": "FF3366",
+                "title": f"🔔 Hancock Alert — {source.upper()} [{severity.upper()}]",
+                "text": f"**Alert:** {alert[:200]}\n\n**Triage:** {summary}",
+            }).encode()
+            try:
+                req = urllib.request.Request(teams_url, data=payload,
+                                             headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=5)  # nosec B310 — scheme validated as https above
+                logger.info("Teams webhook notification sent successfully")
+            except urllib.error.URLError as exc:
+                logger.warning("Failed to send Teams notification: %s", exc)
+            except Exception as exc:
+                logger.error("Unexpected error sending Teams notification: %s", exc)
 
 
 def run_server(client, model: str, port: int):
@@ -1018,7 +1027,7 @@ def run_server(client, model: str, port: int):
     print(f"  POST http://localhost:{port}/v1/code     — security code gen (Qwen 2.5 Coder 32B)")
     print(f"  POST http://localhost:{port}/v1/webhook  — SIEM push webhook + Slack/Teams notify")
     print(f"  GET  http://localhost:{port}/health      — status check\n")
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False)  # nosec B104 — intentional: container needs to bind all interfaces
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

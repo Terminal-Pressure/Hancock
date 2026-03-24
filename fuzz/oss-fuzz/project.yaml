@@ -1,5 +1,6 @@
-homepage: "https://github.com/0ai-Cyberviser/Hancock"
+homepage: "https://github.com/cyberviser/Hancock"
 language: python
+vendor: "CyberViser"
 primary_contact: "cyberviser@proton.me"
 auto_ccs:
   - "security@cyberviser.ai"
@@ -8,4 +9,6 @@ fuzzing_engines:
 sanitizers:
   - address
   - undefined
-main_repo: "https://github.com/0ai-Cyberviser/Hancock"
+  - coverage
+main_repo: "https://github.com/cyberviser/Hancock"
+file_github_issue: true

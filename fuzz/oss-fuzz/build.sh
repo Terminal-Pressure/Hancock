@@ -1,8 +1,11 @@
 #!/bin/bash -eu
 # OSS-Fuzz build script for Hancock
 
-# Install the project in editable mode so fuzz targets can import modules
-pip3 install -e "$SRC/hancock" || pip3 install -r "$SRC/hancock/requirements.txt"
+# Install dependencies and the project itself
+pip3 install --upgrade pip
+pip3 install atheris
+pip3 install -r "$SRC/hancock/requirements.txt"
+pip3 install -e "$SRC/hancock" 2>/dev/null || true
 
 # Compile each fuzz target using the OSS-Fuzz Python helper
 FUZZ_DIR="$SRC/hancock/fuzz"

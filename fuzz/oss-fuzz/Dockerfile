@@ -1,15 +1,11 @@
 FROM gcr.io/oss-fuzz-base/base-builder-python
 
-RUN apt-get update && apt-get install -y python3-dev
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        python3-dev && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy the project source
-COPY . $SRC/hancock
+# Clone the upstream repository; OSS-Fuzz builds always pull from VCS
+RUN git clone --depth 1 https://github.com/cyberviser/Hancock $SRC/hancock
 
-WORKDIR $SRC/hancock
-
-# Install project dependencies and atheris
-RUN pip3 install --upgrade pip && \
-    pip3 install -r requirements.txt && \
-    pip3 install atheris
-
-COPY fuzz/oss-fuzz/build.sh $SRC/
+COPY build.sh $SRC/

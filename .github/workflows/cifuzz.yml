@@ -8,10 +8,12 @@ on:
     branches: [main]
     paths:
       - "hancock_agent.py"
+      - "hancock_constants.py"
       - "collectors/**"
       - "formatter/**"
       - "fuzz/**"
       - "requirements*.txt"
+      - "orchestration_controller.py"
 
 permissions:
   contents: read

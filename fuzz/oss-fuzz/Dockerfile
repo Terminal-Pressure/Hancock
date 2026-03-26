@@ -6,6 +6,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 # Clone the upstream repository; OSS-Fuzz builds always pull from VCS
-RUN git clone --depth 1 https://github.com/cyberviser/Hancock $SRC/hancock
+RUN git clone --depth 1 https://github.com/0ai-Cyberviser/Hancock $SRC/hancock
 
 COPY build.sh $SRC/

@@ -1,0 +1,63 @@
+# ─── Continuous Fuzzing — Scheduled OSS-Fuzz integration for Google Bug Hunters ──
+# Runs fuzz targets on a recurring schedule using the same OSS-Fuzz Docker
+# environment, providing continuous coverage beyond PR-gated CIFuzz runs.
+# Eligible for Google Bug Hunters open-source rewards programme.
+#
+# References:
+#   https://google.github.io/oss-fuzz/
+#   https://bughunters.google.com/about/rules/6625378258649088
+name: Continuous Fuzzing
+
+on:
+  schedule:
+    # Run every day at 03:00 UTC
+    - cron: "0 3 * * *"
+  workflow_dispatch:  # allow manual trigger
+
+permissions:
+  contents: read
+
+jobs:
+  continuous-fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer:
+          - address
+          - undefined
+    steps:
+      - name: Build Fuzzers
+        id: build
+        uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+        with:
+          oss-fuzz-project-name: hancock
+          language: python
+          sanitizer: ${{ matrix.sanitizer }}
+          dry-run: false
+
+      - name: Run Fuzzers
+        uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+        with:
+          oss-fuzz-project-name: hancock
+          language: python
+          fuzz-seconds: 3600
+          sanitizer: ${{ matrix.sanitizer }}
+          dry-run: false
+          output-sarif: true
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: cifuzz-sarif/results.sarif
+        continue-on-error: true
+
+      - name: Upload Crash Artifacts
+        uses: actions/upload-artifact@v4
+        if: failure() && steps.build.outcome == 'success'
+        with:
+          name: continuous-fuzz-artifacts-${{ matrix.sanitizer }}
+          path: ./out/artifacts
+          retention-days: 30

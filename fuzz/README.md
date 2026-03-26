@@ -26,7 +26,7 @@ Bug Hunters.
 
 ```bash
 # Install fuzzing dependencies
-pip install atheris defusedxml
+pip install atheris
 
 # Run all fuzz targets (60 seconds each)
 make fuzz

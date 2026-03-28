@@ -289,7 +289,7 @@ cp .env.example .env
 | `HANCOCK_WEBHOOK_SECRET` | HMAC-SHA256 secret for `/v1/webhook` | — |
 | `HANCOCK_SLACK_WEBHOOK` | Slack incoming webhook URL | — |
 | `HANCOCK_TEAMS_WEBHOOK` | Microsoft Teams incoming webhook URL | — |
-| `IPINFO_TOKEN` | ipinfo.io API token (OSINT fallback) | — |
+| `IPINFO_TOKEN` | ipinfo.io API token (OSINT geolocation fallback) | — |
 | `ABUSEIPDB_KEY` | AbuseIPDB API key (threat enrichment) | — |
 | `VT_API_KEY` | VirusTotal API key (threat enrichment) | — |
 
@@ -305,7 +305,7 @@ The OSINT module (`collectors/osint_geolocation.py`) provides multi-source IP/do
 - **Threat enrichment** — AbuseIPDB + VirusTotal integration for risk scoring
 - **Infrastructure mapping** — Geographic clustering via Haversine distance, ASN/ISP grouping
 - **Predictive analytics** — Forecast future threat infrastructure locations based on historical patterns
-- **Risk scoring** — Bulletproof ASN detection (16 known-abused ASNs), country cyber-risk index
+- **Risk scoring** — Bulletproof ASN detection, country cyber-risk index (see `collectors/osint_geolocation.py` for the full list)
 
 ### CLI Mode
 

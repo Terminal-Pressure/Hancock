@@ -1,6 +1,6 @@
 """Shared constants for Hancock modules.
 
-Centralises configuration values, limits, and defaults that are referenced
+Centralizes configuration values, limits, and defaults that are referenced
 across hancock_agent, orchestration_controller, input_validator, and tests.
 """
 

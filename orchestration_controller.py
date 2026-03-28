@@ -133,7 +133,7 @@ class OrchestrationController:
         self._max_history = max_history
         self._lock = threading.Lock()
         logger.info(
-            "OrchestrationController initialised",
+            "OrchestrationController initialized",
             extra={"allowlist": sorted(self.allowlist), "max_history": max_history},
         )
 

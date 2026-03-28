@@ -45,12 +45,15 @@ class NmapRecon:
                 ip = host.find('address').get('addr')
                 hostname = host.find('hostnames/hostname').get('name') if host.find('hostnames/hostname') is not None else 'N/A'
                 services = []
-                for service in host.findall('services/service'):
-                    services.append({
-                        'name': service.get('name'),
-                        'port': service.get('port'),
-                        'protocol': service.get('protocol')
-                    })
+                # Nmap XML places services under ports/port/service
+                for port in host.findall('ports/port'):
+                    service_el = port.find('service')
+                    if service_el is not None:
+                        services.append({
+                            'name': service_el.get('name'),
+                            'port': port.get('portid'),
+                            'protocol': port.get('protocol')
+                        })
                 
                 data['hosts'].append({
                     'ip': ip,

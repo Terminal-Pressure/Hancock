@@ -61,7 +61,11 @@ def _check_ollama() -> CheckResult:
     import urllib.request
     import urllib.error
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    tags_url = base_url.rstrip("/v1").rstrip("/") + "/api/tags"
+    # Normalise base URL and strip an explicit `/v1` suffix if present.
+    normalized_base = base_url.rstrip("/")
+    if normalized_base.endswith("/v1"):
+        normalized_base = normalized_base[:-3]
+    tags_url = normalized_base + "/api/tags"
     try:
         with urllib.request.urlopen(tags_url, timeout=5):
             return CheckResult("ollama:connectivity", True, "reachable")

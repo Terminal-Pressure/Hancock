@@ -94,7 +94,8 @@ prometheus:
 
 grafana:
   enabled: true
-  adminPassword: "change-me"
+  # Set via -f my-values.yaml or CI/CD secrets; do NOT use a weak default.
+  adminPassword: ""
   storageSize: "5Gi"
 
 # ── Node scheduling ───────────────────────────────────────────────────────────

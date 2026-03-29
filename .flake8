@@ -1,0 +1,21 @@
+[flake8]
+# Directories/patterns to exclude from all flake8 checks
+exclude =
+    .venv,
+    venv,
+    .git,
+    __pycache__,
+    node_modules,
+    hancock-cpu-adapter,
+    deploy/helm,
+    *.egg-info,
+    dist,
+    build
+
+# hancock_pipeline.py contains Markdown prose with Python code-fence examples.
+# The file is intentionally not a runnable Python module — suppress E999.
+per-file-ignores =
+    hancock_pipeline.py: E999
+
+max-line-length = 127
+max-complexity = 10

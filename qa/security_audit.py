@@ -191,12 +191,28 @@ def generate_report() -> dict:
 
 
 def _redact_potential_secrets(text: str) -> str:
-    """Redact substrings that look like secrets based on SECRET_PATTERNS."""
+    """Redact substrings that look like secrets based on SECRET_PATTERNS.
+
+    This is a best-effort safeguard to avoid ever printing cleartext secrets.
+    It first applies the explicit SECRET_PATTERNS, then performs a generic
+    masking pass for any long token-like substrings that could be secrets.
+    """
+    if text is None:
+        return ""
     if not isinstance(text, str):
         text = str(text)
+
     redacted = text
+    # First, apply all explicit secret patterns.
     for pattern, _ in SECRET_PATTERNS:
         redacted = pattern.sub("<redacted>", redacted)
+
+    # As a fallback, redact any long, high-entropy-looking tokens
+    # consisting of word characters, dashes or underscores. This helps
+    # catch unknown secret formats that are not yet in SECRET_PATTERNS.
+    generic_token_pattern = re.compile(r"[A-Za-z0-9_\-]{24,}")
+    redacted = generic_token_pattern.sub("<redacted>", redacted)
+
     return redacted
 
 

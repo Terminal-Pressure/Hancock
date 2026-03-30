@@ -30,7 +30,6 @@ else:
     RESULTS_DIR = Path(tempfile.gettempdir()) / "security_audit_results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-SOURCE_DIRS = ["hancock_agent.py", "hancock_constants.py", "monitoring/", "deploy/"]
 EXCLUDE     = ["deploy/helm", ".venv", "node_modules", "hancock-cpu-adapter"]
 
 # ── Secret pattern detector ───────────────────────────────────────────────────

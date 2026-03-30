@@ -1,0 +1,74 @@
+name: Security
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  schedule:
+    - cron: "0 6 * * 1"   # Weekly on Monday at 06:00 UTC
+
+jobs:
+  bandit-sast:
+    name: Bandit SAST scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bandit
+        run: pip install bandit[toml]
+
+      - name: Run Bandit (medium severity and above)
+        run: |
+          bandit -r . \
+            --exclude ./tests,./venv,./.venv,./data \
+            -ll -ii \
+            --format txt
+
+  pip-audit:
+    name: pip-audit dependency scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Audit production dependencies
+        run: |
+          # CVE-2026-4539: pygments <=2.19.2 ReDoS in AdlLexer (transitive dep, no fix available yet)
+          # Remove --ignore-vuln once pygments releases a patched version
+          pip-audit -r requirements.txt --ignore-vuln CVE-2026-4539
+
+  trivy-image:
+    name: Trivy container image scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t hancock:scan -f deploy/Dockerfile .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: "hancock:scan"
+          format: "table"
+          exit-code: "0"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"

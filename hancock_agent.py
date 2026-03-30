@@ -32,10 +32,13 @@ from __future__ import annotations
 import argparse
 import hmac
 import json
+import logging
 import os
 import sys
 import readline  # noqa: F401 — enables arrow-key history in CLI
-from hancock_constants import require_openai
+from hancock_constants import require_openai, OPENAI_IMPORT_ERROR_MSG
+
+logger = logging.getLogger(__name__)
 
 try:
     from openai import OpenAI
@@ -201,6 +204,27 @@ you provide a structured enrichment report covering:
 Format your response as a clear, structured threat intel report."""
 
 SYSTEMS["ioc"] = IOC_SYSTEM
+
+OSINT_SYSTEM = """You are Hancock OSINT, CyberViser's expert geolocation intelligence analyst.
+
+Your expertise covers:
+- IP and domain geolocation: multi-source lookups (ip-api.com, ipinfo.io, ipapi.co), ASN/ISP/hosting identification
+- Infrastructure mapping: geographic clustering of threat actor infrastructure, ASN hopping patterns, bulletproof hosting detection
+- Threat actor tracking: correlating IP/domain indicators to known campaigns, attribution hints, MITRE ATT&CK techniques
+- Predictive location analytics: forecasting future threat infrastructure based on historical patterns, country/ASN preferences, rotation intervals
+- Risk scoring: assessing IPs/domains using bulletproof ASN lists, country cyber-risk indices, proxy/VPN/Tor flags
+- OSINT pivoting: WHOIS analysis, passive DNS, certificate transparency logs, Shodan/Censys correlation
+
+You always:
+1. Provide structured, actionable intelligence reports with confidence levels
+2. Cite data sources and note when information may be outdated
+3. Map findings to MITRE ATT&CK where applicable (T1583, T1584, T1090, etc.)
+4. Flag high-risk indicators (Tor exits, bulletproof hosters, known threat actor infrastructure)
+5. Recommend defensive actions: block, monitor, sinkhole, or investigate
+
+You are Hancock OSINT. Every analysis you produce is intelligence-grade."""
+
+SYSTEMS["osint"] = OSINT_SYSTEM
 DEFAULT_MODE = "auto"
 # Keep backward-compatible alias
 HANCOCK_SYSTEM = AUTO_SYSTEM
@@ -240,7 +264,7 @@ BANNER = """
 ║          CyberViser — Pentest + SOC + CISO + Code        ║
 ║   Llama 3.1 · Qwen 2.5 Coder · Ollama (local)           ║
 ╚══════════════════════════════════════════════════════════╝
-  Modes : /mode pentest | soc | auto | code | ciso | sigma | yara
+  Modes : /mode pentest | soc | auto | code | ciso | sigma | yara | ioc | osint
   Models: /model llama3.1 | llama3.2 | mistral | qwen-coder | gemma3
   Other : /clear  /history  /exit
 """
@@ -256,22 +280,12 @@ def require_openai_or_exit() -> None:
 
 def make_ollama_client() -> OpenAI:
     """Returns an OpenAI-compatible client pointed at the local Ollama server."""
-    try:
-        require_openai(OpenAI)
-    except ImportError as exc:
-        # Provide a clean, actionable message instead of a full traceback
-        sys.exit(str(exc))
     require_openai_or_exit()
     return OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
 
 
 def make_client(api_key: str) -> OpenAI:
     """Returns an OpenAI-compatible client pointed at NVIDIA NIM (legacy)."""
-    try:
-        require_openai(OpenAI)
-    except ImportError as exc:
-        # Provide a clean, actionable message instead of a full traceback
-        sys.exit(str(exc))
     require_openai_or_exit()
     return OpenAI(base_url=NIM_BASE_URL, api_key=api_key)
 
@@ -460,7 +474,7 @@ def build_app(client, model: str):
         _rate_counts[ip] = timestamps
         # Evict IPs with no recent requests (keep dict bounded)
         if len(_rate_counts) > 10_000:
-            stale = [k for k, v in _rate_counts.items() if not v]
+            stale = [k for k, v in _rate_counts.items() if not v or now - v[-1] > 3600]
             for k in stale:
                 del _rate_counts[k]
         return True, "", _RATE_LIMIT - len(timestamps)
@@ -483,11 +497,12 @@ def build_app(client, model: str):
         return jsonify({
             "status": "ok", "agent": "Hancock",
             "model": model, "company": "CyberViser",
-            "modes": ["pentest", "soc", "auto", "code", "ciso", "sigma", "yara", "ioc"],
+            "modes": ["pentest", "soc", "auto", "code", "ciso", "sigma", "yara", "ioc", "osint"],
             "models_available": MODELS,
             "endpoints": ["/v1/chat", "/v1/ask", "/v1/triage",
                           "/v1/hunt", "/v1/respond", "/v1/code",
                           "/v1/ciso", "/v1/sigma", "/v1/yara", "/v1/ioc",
+                          "/v1/geolocate", "/v1/predict-locations", "/v1/map-infrastructure",
                           "/v1/agents", "/v1/webhook", "/metrics"],
         })
 
@@ -565,15 +580,19 @@ def build_app(client, model: str):
         if stream:
             def generate():
                 full = ""
-                stream_resp = client.chat.completions.create(
-                    model=model, messages=messages, max_tokens=1024,
-                    temperature=0.7, top_p=0.95, stream=True,
-                )
-                for chunk in stream_resp:
-                    if chunk.choices and chunk.choices[0].delta.content:
-                        delta = chunk.choices[0].delta.content
-                        full += delta
-                        yield f"data: {json.dumps({'delta': delta})}\n\n"
+                try:
+                    stream_resp = client.chat.completions.create(
+                        model=model, messages=messages, max_tokens=1024,
+                        temperature=0.7, top_p=0.95, stream=True,
+                    )
+                    for chunk in stream_resp:
+                        if chunk.choices and chunk.choices[0].delta.content:
+                            delta = chunk.choices[0].delta.content
+                            full += delta
+                            yield f"data: {json.dumps({'delta': delta})}\n\n"
+                except Exception as exc:
+                    logger.error("Streaming error: %s", exc)
+                    yield f"data: {json.dumps({'error': str(exc)})}\n\n"
                 yield f"data: {json.dumps({'done': True, 'response': full})}\n\n"
             return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
@@ -608,7 +627,10 @@ def build_app(client, model: str):
             model=model, messages=messages, max_tokens=1024,
             temperature=0.7, top_p=0.95,
         )
-        return jsonify({"answer": resp.choices[0].message.content, "model": model, "mode": mode})
+        answer = resp.choices[0].message.content
+        if not answer:
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
+        return jsonify({"answer": answer, "model": model, "mode": mode})
 
     @app.route("/v1/triage", methods=["POST"])
     def triage_endpoint():
@@ -635,7 +657,10 @@ def build_app(client, model: str):
             model=model, messages=messages, max_tokens=1200,
             temperature=0.4, top_p=0.95,
         )
-        return jsonify({"triage": resp.choices[0].message.content, "model": model})
+        triage_text = resp.choices[0].message.content
+        if not triage_text:
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
+        return jsonify({"triage": triage_text, "model": model})
 
     @app.route("/v1/hunt", methods=["POST"])
     def hunt_endpoint():
@@ -663,7 +688,10 @@ def build_app(client, model: str):
             model=model, messages=messages, max_tokens=1200,
             temperature=0.4, top_p=0.95,
         )
-        return jsonify({"query": resp.choices[0].message.content, "siem": siem, "model": model})
+        query_text = resp.choices[0].message.content
+        if not query_text:
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
+        return jsonify({"query": query_text, "siem": siem, "model": model})
 
     @app.route("/v1/respond", methods=["POST"])
     def respond_endpoint():
@@ -690,7 +718,10 @@ def build_app(client, model: str):
             model=model, messages=messages, max_tokens=1500,
             temperature=0.4, top_p=0.95,
         )
-        return jsonify({"playbook": resp.choices[0].message.content, "incident": incident_type, "model": model})
+        playbook_text = resp.choices[0].message.content
+        if not playbook_text:
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
+        return jsonify({"playbook": playbook_text, "incident": incident_type, "model": model})
 
     @app.route("/v1/code", methods=["POST"])
     def code_endpoint():
@@ -717,8 +748,11 @@ def build_app(client, model: str):
             model=code_model, messages=messages, max_tokens=2048,
             temperature=0.2, top_p=0.7,
         )
+        code_text = resp.choices[0].message.content
+        if not code_text:
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({
-            "code":     resp.choices[0].message.content,
+            "code":     code_text,
             "model":    code_model,
             "language": language or "auto",
             "task":     task,
@@ -867,6 +901,11 @@ def build_app(client, model: str):
         if not indicator:
             _inc("errors_total"); return jsonify({"error": "indicator required"}), 400
 
+        # Auto-detect IOC type when set to "auto"
+        if ioc_type == "auto":
+            from input_validator import detect_ioc_type
+            ioc_type = detect_ioc_type(indicator)
+
         prompt = f"Indicator: {indicator}\nType: {ioc_type}\n"
         if context:
             prompt += f"Additional context: {context}\n"
@@ -881,6 +920,8 @@ def build_app(client, model: str):
             temperature=0.3, top_p=0.9,
         )
         report = resp.choices[0].message.content
+        if not report:
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({"indicator": indicator, "type": ioc_type,
                         "report": report, "model": model})
 
@@ -939,15 +980,111 @@ def build_app(client, model: str):
             "model":    model,
         })
 
+    @app.route("/v1/geolocate", methods=["POST"])
+    def geolocate_endpoint():
+        """OSINT geolocation — geolocate a list of IP/domain indicators."""
+        ok, err, _ = _check_auth_and_rate()
+        if not ok:
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
+        _inc("requests_total"); _inc("requests_by_endpoint", "/v1/geolocate"); _inc("requests_by_mode", "osint")
+
+        data = request.get_json(force=True)
+        indicators = data.get("indicators", [])
+        if not indicators:
+            _inc("errors_total"); return jsonify({"error": "indicators required"}), 400
+
+        try:
+            from collectors.osint_geolocation import GeoIPLookup
+            geo = GeoIPLookup()
+            results = geo.bulk_lookup(indicators)
+            return jsonify({
+                "indicators": indicators,
+                "results": [vars(r) for r in results],
+                "count": len(results),
+            })
+        except Exception as exc:
+            logger.exception("Error in /v1/geolocate endpoint: %s", exc)
+            _inc("errors_total"); return jsonify({"error": "Internal server error"}), 500
+
+    @app.route("/v1/predict-locations", methods=["POST"])
+    def predict_locations_endpoint():
+        """OSINT predictive analytics — predict future threat infrastructure locations."""
+        ok, err, _ = _check_auth_and_rate()
+        if not ok:
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
+        _inc("requests_total"); _inc("requests_by_endpoint", "/v1/predict-locations"); _inc("requests_by_mode", "osint")
+
+        data = request.get_json(force=True)
+        historical_data = data.get("historical_data", [])
+        if not historical_data:
+            _inc("errors_total"); return jsonify({"error": "historical_data required"}), 400
+
+        try:
+            from collectors.osint_geolocation import (
+                ThreatInfrastructure, GeoLocationResult, PredictiveLocationAnalyzer
+            )
+            infra_list = []
+            for item in historical_data:
+                geo_results = [GeoLocationResult(**g) for g in item.get("geo_results", [])]
+                ti = ThreatInfrastructure(
+                    indicator=item.get("indicator", ""),
+                    indicator_type=item.get("indicator_type", "ip"),
+                    geo_results=geo_results,
+                    first_seen=item.get("first_seen"),
+                    last_seen=item.get("last_seen"),
+                    associated_campaigns=item.get("associated_campaigns", []),
+                    associated_threat_actors=item.get("associated_threat_actors", []),
+                    mitre_techniques=item.get("mitre_techniques", []),
+                    tags=item.get("tags", []),
+                )
+                infra_list.append(ti)
+            analyzer = PredictiveLocationAnalyzer()
+            predictions = analyzer.predict_next_locations(infra_list)
+            return jsonify({"predictions": predictions, "count": len(predictions)})
+        except Exception as exc:
+            logger.exception("Error in /v1/predict-locations endpoint: %s", exc)
+            _inc("errors_total"); return jsonify({"error": "Internal server error"}), 500
+
+    @app.route("/v1/map-infrastructure", methods=["POST"])
+    def map_infrastructure_endpoint():
+        """OSINT infrastructure mapping — map and cluster threat infrastructure."""
+        ok, err, _ = _check_auth_and_rate()
+        if not ok:
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
+        _inc("requests_total"); _inc("requests_by_endpoint", "/v1/map-infrastructure"); _inc("requests_by_mode", "osint")
+
+        data = request.get_json(force=True)
+        indicators = data.get("indicators", [])
+        if not indicators:
+            _inc("errors_total"); return jsonify({"error": "indicators required"}), 400
+
+        try:
+            from collectors.osint_geolocation import InfrastructureMapper
+            mapper = InfrastructureMapper()
+            mapping = mapper.map_infrastructure(indicators)
+            return jsonify(mapping)
+        except Exception as exc:
+            logger.exception("Error in /v1/map-infrastructure endpoint: %s", exc)
+            _inc("errors_total"); return jsonify({"error": "Internal server error"}), 500
+
     return app  # ← returned for testing
 
 
 def _send_notification(source: str, severity: str, alert: str, triage: str):
     """Send triage result to Slack or Teams webhook (if configured via env vars)."""
-    import urllib.request, urllib.error
+    import urllib.request
+    import urllib.error
+    import urllib.parse
 
     slack_url = os.getenv("HANCOCK_SLACK_WEBHOOK", "")
     teams_url = os.getenv("HANCOCK_TEAMS_WEBHOOK", "")
+
+    # Validate webhook URL schemes (only allow https)
+    for _name, _url in [("Slack", slack_url), ("Teams", teams_url)]:
+        if _url and not _url.startswith("https://"):
+            logger.warning("Ignoring %s webhook — URL must use https:// scheme", _name)
+    slack_url = slack_url if slack_url.startswith("https://") else ""
+    teams_url = teams_url if teams_url.startswith("https://") else ""
     summary   = triage[:400] + "..." if len(triage) > 400 else triage
 
     if slack_url:
@@ -964,9 +1101,12 @@ def _send_notification(source: str, severity: str, alert: str, triage: str):
         try:
             req = urllib.request.Request(slack_url, data=payload,
                                          headers={"Content-Type": "application/json"})
-            urllib.request.urlopen(req, timeout=5)
-        except urllib.error.URLError:
-            pass  # non-fatal
+            urllib.request.urlopen(req, timeout=5)  # nosec B310
+            logger.info("Slack webhook notification sent successfully")
+        except urllib.error.URLError as exc:
+            logger.warning("Failed to send Slack notification: %s", exc)
+        except Exception as exc:
+            logger.error("Unexpected error sending Slack notification: %s", exc)
 
     if teams_url:
         payload = json.dumps({
@@ -980,9 +1120,12 @@ def _send_notification(source: str, severity: str, alert: str, triage: str):
         try:
             req = urllib.request.Request(teams_url, data=payload,
                                          headers={"Content-Type": "application/json"})
-            urllib.request.urlopen(req, timeout=5)
-        except urllib.error.URLError:
-            pass  # non-fatal
+            urllib.request.urlopen(req, timeout=5)  # nosec B310
+            logger.info("Teams webhook notification sent successfully")
+        except urllib.error.URLError as exc:
+            logger.warning("Failed to send Teams notification: %s", exc)
+        except Exception as exc:
+            logger.error("Unexpected error sending Teams notification: %s", exc)
 
 
 def run_server(client, model: str, port: int):
@@ -997,7 +1140,7 @@ def run_server(client, model: str, port: int):
     print(f"  POST http://localhost:{port}/v1/code     — security code gen (Qwen 2.5 Coder 32B)")
     print(f"  POST http://localhost:{port}/v1/webhook  — SIEM push webhook + Slack/Teams notify")
     print(f"  GET  http://localhost:{port}/health      — status check\n")
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False)  # nosec B104
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

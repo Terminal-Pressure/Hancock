@@ -1,0 +1,87 @@
+---
+# Prometheus alerting rules for the Hancock security AI agent.
+# Load via Prometheus rule_files directive or as a PrometheusRule CR.
+#
+# These rules reference ONLY the metrics emitted by hancock_agent.py /metrics:
+#   hancock_requests_total, hancock_errors_total,
+#   hancock_requests_by_endpoint, hancock_requests_by_mode
+
+groups:
+  - name: hancock.requests
+    interval: 30s
+    rules:
+      # -----------------------------------------------------------------------
+      # Error rate > 5 % over a 5-minute window
+      # -----------------------------------------------------------------------
+      - alert: HancockHighErrorRate
+        expr: |
+          (
+            rate(hancock_errors_total[5m])
+            /
+            (rate(hancock_requests_total[5m]) > 0)
+          ) * 100 > 5
+        for: 2m
+        labels:
+          severity: warning
+          service: hancock
+        annotations:
+          summary: "Hancock error rate above 5 %"
+          description: >
+            The error rate for Hancock has exceeded 5 % for more than
+            2 minutes. Current value: {{ $value | printf "%.1f" }} %.
+
+  - name: hancock.availability
+    interval: 30s
+    rules:
+      # -----------------------------------------------------------------------
+      # No traffic — dead-man switch
+      # -----------------------------------------------------------------------
+      - alert: HancockNoTraffic
+        expr: |
+          rate(hancock_requests_total[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: hancock
+        annotations:
+          summary: "Hancock is receiving no traffic"
+          description: >
+            No requests have been recorded by Hancock in the last 5 minutes.
+            The agent or its backend may be down.
+
+  - name: hancock.memory
+    interval: 60s
+    rules:
+      # -----------------------------------------------------------------------
+      # Memory growth — RSS increasing faster than 50 MiB/min
+      # NOTE: Requires hancock_memory_usage_bytes gauge (from metrics_exporter).
+      #       This alert will be pending/inactive until the gauge is wired in.
+      # -----------------------------------------------------------------------
+      - alert: HancockMemoryGrowth
+        expr: |
+          deriv(hancock_memory_usage_bytes[10m]) > (50 * 1024 * 1024 / 60)
+        for: 10m
+        labels:
+          severity: warning
+          service: hancock
+        annotations:
+          summary: "Hancock process memory is growing rapidly"
+          description: >
+            The RSS of the Hancock process has been growing at more than
+            50 MiB/min for 10 minutes. This may indicate a memory leak.
+
+      # -----------------------------------------------------------------------
+      # Absolute memory threshold — RSS > 1 GiB
+      # -----------------------------------------------------------------------
+      - alert: HancockHighMemoryUsage
+        expr: |
+          hancock_memory_usage_bytes > (1024 * 1024 * 1024)
+        for: 5m
+        labels:
+          severity: critical
+          service: hancock
+        annotations:
+          summary: "Hancock RSS exceeds 1 GiB"
+          description: >
+            The Hancock process RSS has been above 1 GiB for 5 minutes.
+            Current value: {{ $value | humanize1024 }}B.

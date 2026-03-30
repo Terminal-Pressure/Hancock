@@ -180,11 +180,35 @@ def generate_report() -> dict:
     env_highs = sum(
         1 for f in env_findings if f.get("severity") == "HIGH"
     )
+
+    # Treat Bandit/pip-audit as part of the audit gate when available.
+    bandit_result = report.get("sast_bandit") or {}
+    dep_result = report.get("dependency_audit") or {}
+
+    bandit_passed = True
+    if isinstance(bandit_result, dict) and "error" not in bandit_result:
+        rc = bandit_result.get("returncode")
+        if isinstance(rc, int) and rc != 0:
+            bandit_passed = False
+
+    dependency_passed = True
+    if isinstance(dep_result, dict) and "error" not in dep_result:
+        rc = dep_result.get("returncode")
+        if isinstance(rc, int) and rc != 0:
+            dependency_passed = False
+
     report["summary"] = {
-        "secrets_found":  secret_count,
-        "env_issues":     env_issue_count,
-        "env_high":       env_highs,
-        "passed":         secret_count == 0 and env_highs == 0,
+        "secrets_found":     secret_count,
+        "env_issues":        env_issue_count,
+        "env_high":          env_highs,
+        "bandit_passed":     bandit_passed,
+        "dependency_passed": dependency_passed,
+        "passed": (
+            secret_count == 0
+            and env_highs == 0
+            and bandit_passed
+            and dependency_passed
+        ),
     }
 
     return report

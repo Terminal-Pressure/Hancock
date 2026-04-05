@@ -261,11 +261,11 @@ class TestWebhook:
         assert r.status_code == 400
 
     def test_webhook_empty_model_response_returns_502(self):
-        """When the LLM returns an empty response, webhook returns 502."""
+        """When the LLM returns no choices, webhook returns 502."""
         from unittest.mock import MagicMock, patch
         mock_client = MagicMock()
         mock_resp = MagicMock()
-        mock_resp.choices[0].message.content = ""
+        mock_resp.choices = []
         mock_client.chat.completions.create.return_value = mock_resp
         with patch.dict(os.environ, {}, clear=True):
             with patch("hancock_agent.OpenAI", return_value=mock_client):

@@ -1025,7 +1025,10 @@ def build_app(client, model: str):
         _inc("requests_by_endpoint", "/v1/predict-locations")
         _inc("requests_by_mode", "osint")
 
-        data = request.get_json(force=True, silent=True) or {}
+        data = request.get_json(force=True, silent=True)
+        if not isinstance(data, dict):
+            _inc("errors_total")
+            return jsonify({"error": "JSON object required"}), 400
         historical_data = data.get("historical_data", [])
         if not historical_data:
             _inc("errors_total")

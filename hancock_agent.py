@@ -609,7 +609,7 @@ def build_app(client, model: str):
         )
         response_text = _extract_content(resp)
         if not response_text:
-            return jsonify({"error": "model returned empty response"}), 502
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({"response": response_text, "model": model, "mode": mode})
 
     @app.route("/v1/ask", methods=["POST"])

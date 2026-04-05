@@ -91,9 +91,22 @@ def run_flake8() -> dict:
         "--exclude=deploy/helm",
     ])
     lines = [l for l in output.strip().splitlines() if l.strip()]
-    return {"issues": len(lines), "returncode": rc, "output": "\n".join(lines[:20])}
 
+    issues = None
+    count_index = None
+    for index in range(len(lines) - 1, -1, -1):
+        if lines[index].isdigit():
+            issues = int(lines[index])
+            count_index = index
+            break
 
+    if issues is None:
+        issues = 0 if rc == 0 else len(lines)
+        display_lines = lines
+    else:
+        display_lines = lines[:count_index] + lines[count_index + 1:]
+
+    return {"issues": issues, "returncode": rc, "output": "\n".join(display_lines[:20])}
 def generate_report() -> dict:
     timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     report = {

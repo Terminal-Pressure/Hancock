@@ -267,22 +267,24 @@ class TestWebhook:
         mock_resp = MagicMock()
         mock_resp.choices[0].message.content = ""
         mock_client.chat.completions.create.return_value = mock_resp
-        with patch("hancock_agent.OpenAI", return_value=mock_client):
-            import hancock_agent
-            app = hancock_agent.build_app(
-                mock_client, "mistralai/mistral-7b-instruct-v0.3"
-            )
-            app.testing = True
-            c = app.test_client()
-            r = c.post("/v1/webhook",
-                       data=json.dumps({
-                           "source": "splunk",
-                           "alert": "Suspicious activity detected",
-                           "severity": "high",
-                       }),
-                       content_type="application/json")
-            assert r.status_code == 502
-            assert "empty" in r.get_json()["error"]
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("HANCOCK_WEBHOOK_SECRET", None)
+            with patch("hancock_agent.OpenAI", return_value=mock_client):
+                import hancock_agent
+                app = hancock_agent.build_app(
+                    mock_client, "mistralai/mistral-7b-instruct-v0.3"
+                )
+                app.testing = True
+                c = app.test_client()
+                r = c.post("/v1/webhook",
+                           data=json.dumps({
+                               "source": "splunk",
+                               "alert": "Suspicious activity detected",
+                               "severity": "high",
+                           }),
+                           content_type="application/json")
+                assert r.status_code == 502
+                assert "empty" in r.get_json()["error"]
 
 
 # ── Auth (HANCOCK_API_KEY) ────────────────────────────────────────────────────

@@ -18,11 +18,11 @@ class NmapRecon:
 
     def run_scan(self):
         try:
-            logging.info(f'Starting scan for {self.target}')
+            logger.info('Starting scan for %s', self.target)
             self.nm.scan(self.target, arguments='-sV -oX nmap_scan.xml')
-            logging.info('Scan completed successfully')
+            logger.info('Scan completed successfully')
         except Exception as e:
-            logging.error(f'Scan failed for {self.target}: {str(e)}')
+            logger.error('Scan failed for %s: %s', self.target, e)
             raise RuntimeError(f'Scan failed for {self.target}: {str(e)}') from e
 
     def parse_xml_to_json(self):
@@ -53,9 +53,9 @@ class NmapRecon:
 
             with open('nmap_recon.json', 'w') as json_file:
                 json.dump(data, json_file, indent=4)
-                logging.info('Parsed XML to JSON and saved to nmap_recon.json')
+                logger.info('Parsed XML to JSON and saved to nmap_recon.json')
         except Exception as e:
-            logging.error(f'Failed to parse XML: {str(e)}')
+            logger.error('Failed to parse XML: %s', e)
             raise RuntimeError(f'Failed to parse XML: {str(e)}') from e
 
 if __name__ == '__main__':

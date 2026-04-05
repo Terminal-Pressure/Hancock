@@ -338,9 +338,7 @@ def _do_chat(client: OpenAI, messages: list[dict], model: str, stream: bool) -> 
         model=model, messages=messages, max_tokens=1024,
         temperature=0.7, top_p=0.95,
     )
-    if not resp.choices or not resp.choices[0].message.content:
-        return ""
-    return resp.choices[0].message.content
+    return _extract_content(resp)
 
 
 def _extract_content(resp) -> str:

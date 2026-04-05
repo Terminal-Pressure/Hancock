@@ -267,8 +267,7 @@ class TestWebhook:
         mock_resp = MagicMock()
         mock_resp.choices[0].message.content = ""
         mock_client.chat.completions.create.return_value = mock_resp
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("HANCOCK_WEBHOOK_SECRET", None)
+        with patch.dict(os.environ, {}, clear=True):
             with patch("hancock_agent.OpenAI", return_value=mock_client):
                 import hancock_agent
                 app = hancock_agent.build_app(

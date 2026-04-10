@@ -51,7 +51,7 @@ def TestOneInput(data: bytes) -> None:
         try:
             validate_payload(
                 decoded,
-                required=list(decoded.keys())[:5],
+                required=["id", "type", "value", "source", "timestamp"],
             )
         except (KeyError, TypeError, IndexError, AttributeError, ValueError):
             pass

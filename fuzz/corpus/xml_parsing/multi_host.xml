@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nmaprun scanner="nmap" args="nmap -sV 10.0.0.0/24">
+  <host>
+    <address addr="10.0.0.1" addrtype="ipv4"/>
+    <hostnames><hostname name="gateway.local"/></hostnames>
+    <ports>
+      <port portid="22" protocol="tcp"><service name="ssh"/></port>
+      <port portid="80" protocol="tcp"><service name="http"/></port>
+    </ports>
+  </host>
+  <host>
+    <address addr="10.0.0.2" addrtype="ipv4"/>
+    <hostnames><hostname name="db.local"/></hostnames>
+    <ports>
+      <port portid="3306" protocol="tcp"><service name="mysql"/></port>
+      <port portid="5432" protocol="tcp"><service name="postgresql"/></port>
+    </ports>
+  </host>
+  <host>
+    <address addr="10.0.0.3" addrtype="ipv4"/>
+    <ports/>
+  </host>
+</nmaprun>

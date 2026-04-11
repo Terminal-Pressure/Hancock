@@ -27,6 +27,7 @@ def TestOneInput(data: bytes) -> None:
             addr = host.find("address")
             if addr is not None:
                 addr.get("addr")
+                addr.get("addrtype")
             hostnames = host.find("hostnames/hostname")
             if hostnames is not None:
                 hostnames.get("name")

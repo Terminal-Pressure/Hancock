@@ -5,6 +5,8 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         python-version: ["3.8", "3.9", "3.10"]
@@ -20,4 +22,4 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        pylint $(git ls-files '*.py') --disable=C,R --fail-under=7.0
+        pylint $(git ls-files '*.py') --disable=C,R --fail-under=9.0

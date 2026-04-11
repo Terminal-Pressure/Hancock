@@ -41,4 +41,4 @@ where = ["clients/python"]
 "" = "clients/python"
 
 [tool.pylint."messages_control"]
-disable = ["import-error", "raw-checker-failed"]
+disable = ["import-error"]

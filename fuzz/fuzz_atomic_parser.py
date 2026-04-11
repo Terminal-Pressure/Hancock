@@ -2,11 +2,10 @@
 Fuzz target for Atomic Red Team test parser (collectors/atomic_collector.py).
 
 Exercises parse_atomic_tests() with arbitrary dict inputs to find crashes
-caused by unexpected regex matches, missing keys, or malformed YAML text.
+in regex-based YAML content parsing, key access, and string operations.
 """
 import atheris
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -16,27 +15,34 @@ from collectors.atomic_collector import parse_atomic_tests  # noqa: E402
 
 
 def TestOneInput(data: bytes) -> None:
-    """Fuzz parse_atomic_tests with arbitrary data."""
+    """Fuzz parse_atomic_tests with arbitrary dicts."""
     fdp = atheris.FuzzedDataProvider(data)
     choice = fdp.ConsumeIntInRange(0, 1)
-    remaining = fdp.ConsumeBytes(fdp.remaining_bytes())
+    payload_bytes = fdp.ConsumeBytes(fdp.remaining_bytes())
 
-    try:
-        if choice == 0:
-            # Fuzz with arbitrary JSON dict (simulating fetch_atomic_yaml output)
-            decoded = json.loads(remaining)
-            if isinstance(decoded, dict):
-                parse_atomic_tests(decoded)
-        else:
-            # Fuzz with raw YAML-like text in the expected dict structure
-            text = remaining.decode("utf-8", errors="replace")
-            parse_atomic_tests({
-                "raw_yaml": text,
-                "technique_id": "T1059.001",
-            })
-    except (KeyError, TypeError, IndexError, AttributeError, ValueError,
-            json.JSONDecodeError, UnicodeDecodeError, re.error):
-        pass
+    if choice == 0:
+        # Fuzz with a JSON dict (structured input)
+        try:
+            decoded = json.loads(payload_bytes)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return
+        if not isinstance(decoded, dict):
+            return
+        try:
+            parse_atomic_tests(decoded)
+        except (KeyError, TypeError, IndexError, AttributeError, ValueError):
+            pass
+    else:
+        # Fuzz with arbitrary raw_yaml content
+        try:
+            text = payload_bytes.decode("utf-8", errors="replace")
+        except Exception:
+            return
+        raw = {"raw_yaml": text, "technique_id": "T0000"}
+        try:
+            parse_atomic_tests(raw)
+        except (KeyError, TypeError, IndexError, AttributeError, ValueError):
+            pass
 
 
 def main() -> None:

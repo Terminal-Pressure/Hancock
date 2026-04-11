@@ -31,7 +31,7 @@ def TestOneInput(data: bytes) -> None:
             hostnames = host.find("hostnames/hostname")
             if hostnames is not None:
                 hostnames.get("name")
-            # Nmap XML places services under ports/port/service
+            # Match actual nmap_recon.py: ports/port -> service child
             for port in host.findall("ports/port"):
                 port.get("portid")
                 port.get("protocol")

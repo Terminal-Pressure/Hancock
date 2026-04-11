@@ -27,13 +27,16 @@ def TestOneInput(data: bytes) -> None:
             addr = host.find("address")
             if addr is not None:
                 addr.get("addr")
+                addr.get("addrtype")
             hostnames = host.find("hostnames/hostname")
             if hostnames is not None:
                 hostnames.get("name")
-            for svc in host.findall("services/service"):
-                svc.get("name")
-                svc.get("port")
-                svc.get("protocol")
+            for port in host.findall("ports/port"):
+                port.get("portid")
+                port.get("protocol")
+                svc = port.find("service")
+                if svc is not None:
+                    svc.get("name")
     except (AttributeError, TypeError, ValueError):
         pass
 

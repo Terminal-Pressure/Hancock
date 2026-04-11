@@ -1,1 +1,1 @@
-{"alert":"Mimikatz detected on DC01","mode":"soc","severity":"critical"}
+{"alert":"Suspicious login from 10.0.0.1","mode":"soc"}

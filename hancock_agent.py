@@ -37,10 +37,6 @@ import os
 import sys
 import readline  # noqa: F401 — enables arrow-key history in CLI
 from hancock_constants import require_openai, OPENAI_IMPORT_ERROR_MSG
-from monitoring.logging_config import (
-    get_request_id,
-    init_flask_logging,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -439,28 +435,6 @@ def build_app(client, model: str):
         sys.exit("Run: .venv/bin/pip install flask")
 
     app = Flask("hancock")
-    init_flask_logging(app)
-
-    def _mode_from_request(default_mode: str = "n/a") -> str:
-        payload = request.get_json(silent=True) if request.is_json else {}
-        if isinstance(payload, dict):
-            return str(payload.get("mode", default_mode))
-        return default_mode
-
-    def _error_response(message: str, status_code: int, mode: str = "n/a"):
-        request_id = get_request_id()
-        logger.warning(
-            "request_error",
-            extra={
-                "event": "request_error",
-                "endpoint": request.path,
-                "mode": mode,
-                "status": status_code,
-                "request_id": request_id,
-                "error": message,
-            },
-        )
-        return jsonify({"error": message, "request_id": request_id}), status_code
 
     # ── Metrics counters ──────────────────────────────────────────────────────
     import threading
@@ -575,7 +549,7 @@ def build_app(client, model: str):
         ok, err, _ = _check_auth_and_rate()
         if not ok:
             _inc("errors_total")
-            return _error_response(err, 401 if "Unauthorized" in err else 429)
+            return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total"); _inc("requests_by_endpoint", "/v1/agents")
         prompts = {name: prompt for name, prompt in SYSTEMS.items() if prompt}
         return jsonify({
@@ -589,7 +563,7 @@ def build_app(client, model: str):
         ok, err, _ = _check_auth_and_rate()
         if not ok:
             _inc("errors_total")
-            return _error_response(err, 401 if "Unauthorized" in err else 429, mode=_mode_from_request("auto"))
+            return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total"); _inc("requests_by_endpoint", "/v1/chat")
         data = request.get_json(force=True)
         user_msg = data.get("message", "")
@@ -598,13 +572,11 @@ def build_app(client, model: str):
         mode     = data.get("mode", "auto")
 
         if not user_msg:
-            _inc("errors_total"); return _error_response("message required", 400, mode=mode)
+            _inc("errors_total"); return jsonify({"error": "message required"}), 400
         if mode not in SYSTEMS and mode != "auto":
-            _inc("errors_total"); return _error_response(
-                f"invalid mode '{mode}'; valid: {list(SYSTEMS.keys())}", 400, mode=mode
-            )
+            _inc("errors_total"); return jsonify({"error": f"invalid mode '{mode}'; valid: {list(SYSTEMS.keys())}"}), 400
         if not isinstance(history, list):
-            _inc("errors_total"); return _error_response("history must be a list", 400, mode=mode)
+            _inc("errors_total"); return jsonify({"error": "history must be a list"}), 400
 
         _inc("requests_by_mode", mode)
 
@@ -626,17 +598,8 @@ def build_app(client, model: str):
                             full += delta
                             yield f"data: {json.dumps({'delta': delta})}\n\n"
                 except Exception as exc:
-                    logger.error(
-                        "streaming_error",
-                        extra={
-                            "event": "streaming_error",
-                            "endpoint": request.path,
-                            "mode": mode,
-                            "request_id": get_request_id(),
-                            "error": str(exc),
-                        },
-                    )
-                    yield f"data: {json.dumps({'error': str(exc), 'request_id': get_request_id()})}\n\n"
+                    logger.error("Streaming error: %s", exc)
+                    yield f"data: {json.dumps({'error': str(exc)})}\n\n"
                 yield f"data: {json.dumps({'done': True, 'response': full})}\n\n"
             return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
@@ -646,7 +609,7 @@ def build_app(client, model: str):
         )
         response_text = _extract_content(resp)
         if not response_text:
-            _inc("errors_total"); return _error_response("model returned empty response", 502, mode=mode)
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({"response": response_text, "model": model, "mode": mode})
 
     @app.route("/v1/ask", methods=["POST"])
@@ -654,15 +617,13 @@ def build_app(client, model: str):
         """Simple single-shot endpoint — no history needed."""
         ok, err, _ = _check_auth_and_rate()
         if not ok:
-            _inc("errors_total"); return _error_response(
-                err, 401 if "Unauthorized" in err else 429, mode=_mode_from_request("auto")
-            )
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total"); _inc("requests_by_endpoint", "/v1/ask")
         data = request.get_json(force=True)
         question = data.get("question", "")
         mode     = data.get("mode", "auto")
         if not question:
-            _inc("errors_total"); return _error_response("question required", 400, mode=mode)
+            _inc("errors_total"); return jsonify({"error": "question required"}), 400
 
         system = SYSTEMS.get(mode, AUTO_SYSTEM)
         messages = [
@@ -675,7 +636,7 @@ def build_app(client, model: str):
         )
         answer = _extract_content(resp)
         if not answer:
-            _inc("errors_total"); return _error_response("model returned empty response", 502, mode=mode)
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({"answer": answer, "model": model, "mode": mode})
 
     @app.route("/v1/triage", methods=["POST"])
@@ -683,12 +644,12 @@ def build_app(client, model: str):
         """SOC alert triage — classify and prioritize a security alert."""
         ok, err, _ = _check_auth_and_rate()
         if not ok:
-            _inc("errors_total"); return _error_response(err, 401 if "Unauthorized" in err else 429, mode="soc")
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total"); _inc("requests_by_endpoint", "/v1/triage"); _inc("requests_by_mode", "soc")
         data  = request.get_json(force=True)
         alert = data.get("alert", "")
         if not alert:
-            _inc("errors_total"); return _error_response("alert required", 400, mode="soc")
+            _inc("errors_total"); return jsonify({"error": "alert required"}), 400
 
         prompt = (
             f"Triage the following security alert. Classify severity (Critical/High/Medium/Low/Info), "
@@ -705,7 +666,7 @@ def build_app(client, model: str):
         )
         triage_text = _extract_content(resp)
         if not triage_text:
-            _inc("errors_total"); return _error_response("model returned empty response", 502, mode="soc")
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({"triage": triage_text, "model": model})
 
     @app.route("/v1/hunt", methods=["POST"])
@@ -713,13 +674,13 @@ def build_app(client, model: str):
         """Threat hunting query generator — generate SIEM queries for a given TTP."""
         ok, err, _ = _check_auth_and_rate()
         if not ok:
-            _inc("errors_total"); return _error_response(err, 401 if "Unauthorized" in err else 429, mode="soc")
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total"); _inc("requests_by_endpoint", "/v1/hunt"); _inc("requests_by_mode", "soc")
         data   = request.get_json(force=True)
         target = data.get("target", "")
         siem   = data.get("siem", "splunk")
         if not target:
-            _inc("errors_total"); return _error_response("target required", 400, mode="soc")
+            _inc("errors_total"); return jsonify({"error": "target required"}), 400
 
         prompt = (
             f"Generate a {siem.upper()} threat hunting query for: {target}\n"
@@ -736,7 +697,7 @@ def build_app(client, model: str):
         )
         query_text = _extract_content(resp)
         if not query_text:
-            _inc("errors_total"); return _error_response("model returned empty response", 502, mode="soc")
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({"query": query_text, "siem": siem, "model": model})
 
     @app.route("/v1/respond", methods=["POST"])
@@ -744,12 +705,12 @@ def build_app(client, model: str):
         """Incident response guidance — PICERL playbook for an incident type."""
         ok, err, _ = _check_auth_and_rate()
         if not ok:
-            _inc("errors_total"); return _error_response(err, 401 if "Unauthorized" in err else 429, mode="soc")
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total"); _inc("requests_by_endpoint", "/v1/respond"); _inc("requests_by_mode", "soc")
         data          = request.get_json(force=True)
         incident_type = data.get("incident", "")
         if not incident_type:
-            _inc("errors_total"); return _error_response("incident required", 400, mode="soc")
+            _inc("errors_total"); return jsonify({"error": "incident required"}), 400
 
         prompt = (
             f"Provide a detailed PICERL incident response playbook for: {incident_type}\n"
@@ -766,7 +727,7 @@ def build_app(client, model: str):
         )
         playbook_text = _extract_content(resp)
         if not playbook_text:
-            _inc("errors_total"); return _error_response("model returned empty response", 502, mode="soc")
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({"playbook": playbook_text, "incident": incident_type, "model": model})
 
     @app.route("/v1/code", methods=["POST"])
@@ -774,13 +735,13 @@ def build_app(client, model: str):
         """Security code generation — uses Qwen 2.5 Coder 32B for best results."""
         ok, err, _ = _check_auth_and_rate()
         if not ok:
-            _inc("errors_total"); return _error_response(err, 401 if "Unauthorized" in err else 429, mode="code")
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total"); _inc("requests_by_endpoint", "/v1/code"); _inc("requests_by_mode", "code")
         data     = request.get_json(force=True)
         task     = data.get("task", "")
         language = data.get("language", "")
         if not task:
-            _inc("errors_total"); return _error_response("task required", 400, mode="code")
+            _inc("errors_total"); return jsonify({"error": "task required"}), 400
 
         lang_hint = f" Write the solution in {language}." if language else ""
         prompt = f"{task}{lang_hint}\nProvide working, production-ready code with comments."
@@ -796,7 +757,7 @@ def build_app(client, model: str):
         )
         code_text = _extract_content(resp)
         if not code_text:
-            _inc("errors_total"); return _error_response("model returned empty response", 502, mode="code")
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({
             "code":     code_text,
             "model":    code_model,
@@ -809,14 +770,14 @@ def build_app(client, model: str):
         """CISO advisor — risk, compliance, board reporting, framework guidance."""
         ok, err, _ = _check_auth_and_rate()
         if not ok:
-            _inc("errors_total"); return _error_response(err, 401 if "Unauthorized" in err else 429, mode="ciso")
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total"); _inc("requests_by_endpoint", "/v1/ciso"); _inc("requests_by_mode", "ciso")
         data     = request.get_json(force=True)
         question = data.get("question", "") or data.get("query", "") or data.get("message", "")
         context  = data.get("context", "")
         output   = data.get("output", "advice")
         if not question:
-            _inc("errors_total"); return _error_response("question required", 400, mode="ciso")
+            _inc("errors_total"); return jsonify({"error": "question required"}), 400
 
         output_hints = {
             "report":        "Format your response as a structured risk report with Executive Summary, Findings, Risk Ratings, and Recommendations.",
@@ -838,7 +799,7 @@ def build_app(client, model: str):
         )
         answer = _extract_content(resp)
         if not answer:
-            _inc("errors_total"); return _error_response("model returned empty response", 502, mode="ciso")
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({"advice": answer, "output": output, "model": model})
 
     @app.route("/v1/sigma", methods=["POST"])
@@ -846,14 +807,14 @@ def build_app(client, model: str):
         """Sigma detection rule generator — convert a TTP or alert description into a Sigma rule."""
         ok, err, _ = _check_auth_and_rate()
         if not ok:
-            _inc("errors_total"); return _error_response(err, 401 if "Unauthorized" in err else 429, mode="sigma")
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total"); _inc("requests_by_endpoint", "/v1/sigma"); _inc("requests_by_mode", "sigma")
         data        = request.get_json(force=True)
         description = data.get("description", "") or data.get("ttp", "") or data.get("query", "")
         logsource   = data.get("logsource", "")    # e.g. "windows sysmon", "linux auditd", "aws cloudtrail"
         technique   = data.get("technique", "")    # e.g. "T1059.001" — auto-tagged if provided
         if not description:
-            _inc("errors_total"); return _error_response("description required", 400, mode="sigma")
+            _inc("errors_total"); return jsonify({"error": "description required"}), 400
 
         hints = []
         if logsource:
@@ -879,7 +840,7 @@ def build_app(client, model: str):
         )
         rule_text = _extract_content(resp)
         if not rule_text:
-            _inc("errors_total"); return _error_response("model returned empty response", 502, mode="sigma")
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({
             "rule":      rule_text,
             "logsource": logsource or "auto",
@@ -892,14 +853,14 @@ def build_app(client, model: str):
         """YARA malware detection rule generator."""
         ok, err, _ = _check_auth_and_rate()
         if not ok:
-            _inc("errors_total"); return _error_response(err, 401 if "Unauthorized" in err else 429, mode="yara")
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total"); _inc("requests_by_endpoint", "/v1/yara"); _inc("requests_by_mode", "yara")
         data        = request.get_json(force=True)
         description = data.get("description", "") or data.get("malware", "") or data.get("query", "")
         file_type   = data.get("file_type", "")   # e.g. "PE", "Office macro", "PDF", "script"
         sample_hash = data.get("hash", "")         # optional SHA256 for meta
         if not description:
-            _inc("errors_total"); return _error_response("description required", 400, mode="yara")
+            _inc("errors_total"); return jsonify({"error": "description required"}), 400
 
         hints = []
         if file_type:
@@ -925,7 +886,7 @@ def build_app(client, model: str):
         )
         rule_text = _extract_content(resp)
         if not rule_text:
-            _inc("errors_total"); return _error_response("model returned empty response", 502, mode="yara")
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({
             "rule":      rule_text,
             "file_type": file_type or "auto",
@@ -937,7 +898,7 @@ def build_app(client, model: str):
         """IOC enrichment — threat intel report for IP, domain, URL, hash, or email."""
         ok, err, _ = _check_auth_and_rate()
         if not ok:
-            _inc("errors_total"); return _error_response(err, 401 if "Unauthorized" in err else 429, mode="ioc")
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total"); _inc("requests_by_endpoint", "/v1/ioc"); _inc("requests_by_mode", "ioc")
 
         data = request.get_json(force=True)
@@ -945,7 +906,7 @@ def build_app(client, model: str):
         ioc_type  = data.get("type", "auto")
         context   = data.get("context", "")
         if not indicator:
-            _inc("errors_total"); return _error_response("indicator required", 400, mode="ioc")
+            _inc("errors_total"); return jsonify({"error": "indicator required"}), 400
 
         # Auto-detect IOC type when set to "auto"
         if ioc_type == "auto":
@@ -967,7 +928,7 @@ def build_app(client, model: str):
         )
         report = _extract_content(resp)
         if not report:
-            _inc("errors_total"); return _error_response("model returned empty response", 502, mode="ioc")
+            _inc("errors_total"); return jsonify({"error": "model returned empty response"}), 502
         return jsonify({"indicator": indicator, "type": ioc_type,
                         "report": report, "model": model})
 
@@ -976,7 +937,7 @@ def build_app(client, model: str):
         """SIEM/EDR push webhook — auto-triage incoming alerts, optionally notify Slack/Teams."""
         ok, err, _ = _check_auth_and_rate()
         if not ok:
-            _inc("errors_total"); return _error_response(err, 401 if "Unauthorized" in err else 429, mode="soc")
+            _inc("errors_total"); return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total"); _inc("requests_by_endpoint", "/v1/webhook"); _inc("requests_by_mode", "soc")
 
         # ── Optional HMAC-SHA256 signature verification ────────────────────────
@@ -990,23 +951,14 @@ def build_app(client, model: str):
             ).hexdigest()
             if not _hmac.compare_digest(sig_header, expected):
                 _inc("errors_total")
-                logger.warning(
-                    "webhook_invalid_signature",
-                    extra={
-                        "event": "webhook_invalid_signature",
-                        "endpoint": request.path,
-                        "mode": "soc",
-                        "request_id": get_request_id(),
-                    },
-                )
-                return _error_response("Invalid webhook signature", 401, mode="soc")
+                return jsonify({"error": "Invalid webhook signature"}), 401
 
         data     = request.get_json(force=True)
         alert    = data.get("alert", "")
         source   = data.get("source", "unknown")
         severity = data.get("severity", "unknown")
         if not alert:
-            _inc("errors_total"); return _error_response("alert required", 400, mode="soc")
+            _inc("errors_total"); return jsonify({"error": "alert required"}), 400
 
         prompt = (
             f"[WEBHOOK ALERT from {source.upper()} | Reported severity: {severity.upper()}]\n\n"
@@ -1025,18 +977,7 @@ def build_app(client, model: str):
         triage_text = _extract_content(resp)
         if not triage_text:
             _inc("errors_total")
-            logger.error(
-                "webhook_model_empty_response",
-                extra={
-                    "event": "webhook_model_empty_response",
-                    "endpoint": request.path,
-                    "mode": "soc",
-                    "request_id": get_request_id(),
-                    "source": source,
-                    "severity": severity,
-                },
-            )
-            return _error_response("model returned empty response", 502, mode="soc")
+            return jsonify({"error": "model returned empty response"}), 502
 
         # ── Optional Slack/Teams notification ─────────────────────────────────
         _send_notification(source, severity, alert, triage_text)
@@ -1055,7 +996,7 @@ def build_app(client, model: str):
         ok, err, _ = _check_auth_and_rate()
         if not ok:
             _inc("errors_total")
-            return _error_response(err, 401 if "Unauthorized" in err else 429, mode="osint")
+            return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total")
         _inc("requests_by_endpoint", "/v1/geolocate")
         _inc("requests_by_mode", "osint")
@@ -1063,11 +1004,11 @@ def build_app(client, model: str):
         data = request.get_json(force=True, silent=True)
         if not isinstance(data, dict):
             _inc("errors_total")
-            return _error_response("JSON object required", 400, mode="osint")
+            return jsonify({"error": "JSON object required"}), 400
         indicators = data.get("indicators", [])
         if not indicators:
             _inc("errors_total")
-            return _error_response("indicators required", 400, mode="osint")
+            return jsonify({"error": "indicators required"}), 400
 
         try:
             from collectors.osint_geolocation import GeoIPLookup
@@ -1079,18 +1020,9 @@ def build_app(client, model: str):
                 "count": len(results),
             })
         except Exception as exc:
-            logger.exception(
-                "osint_geolocate_error",
-                extra={
-                    "event": "osint_geolocate_error",
-                    "endpoint": request.path,
-                    "mode": "osint",
-                    "request_id": get_request_id(),
-                    "error": str(exc),
-                },
-            )
+            logger.exception("Error in /v1/geolocate endpoint: %s", exc)
             _inc("errors_total")
-            return _error_response("Internal server error", 500, mode="osint")
+            return jsonify({"error": "Internal server error"}), 500
 
     @app.route("/v1/predict-locations", methods=["POST"])
     def predict_locations_endpoint():
@@ -1098,7 +1030,7 @@ def build_app(client, model: str):
         ok, err, _ = _check_auth_and_rate()
         if not ok:
             _inc("errors_total")
-            return _error_response(err, 401 if "Unauthorized" in err else 429, mode="osint")
+            return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total")
         _inc("requests_by_endpoint", "/v1/predict-locations")
         _inc("requests_by_mode", "osint")
@@ -1106,11 +1038,11 @@ def build_app(client, model: str):
         data = request.get_json(force=True, silent=True)
         if not isinstance(data, dict):
             _inc("errors_total")
-            return _error_response("JSON object required", 400, mode="osint")
+            return jsonify({"error": "JSON object required"}), 400
         historical_data = data.get("historical_data", [])
         if not historical_data:
             _inc("errors_total")
-            return _error_response("historical_data required", 400, mode="osint")
+            return jsonify({"error": "historical_data required"}), 400
 
         try:
             from collectors.osint_geolocation import (
@@ -1135,18 +1067,9 @@ def build_app(client, model: str):
             predictions = analyzer.predict_next_locations(infra_list)
             return jsonify({"predictions": predictions, "count": len(predictions)})
         except Exception as exc:
-            logger.exception(
-                "osint_predict_locations_error",
-                extra={
-                    "event": "osint_predict_locations_error",
-                    "endpoint": request.path,
-                    "mode": "osint",
-                    "request_id": get_request_id(),
-                    "error": str(exc),
-                },
-            )
+            logger.exception("Error in /v1/predict-locations endpoint: %s", exc)
             _inc("errors_total")
-            return _error_response("Internal server error", 500, mode="osint")
+            return jsonify({"error": "Internal server error"}), 500
 
     @app.route("/v1/map-infrastructure", methods=["POST"])
     def map_infrastructure_endpoint():
@@ -1154,7 +1077,7 @@ def build_app(client, model: str):
         ok, err, _ = _check_auth_and_rate()
         if not ok:
             _inc("errors_total")
-            return _error_response(err, 401 if "Unauthorized" in err else 429, mode="osint")
+            return jsonify({"error": err}), 401 if "Unauthorized" in err else 429
         _inc("requests_total")
         _inc("requests_by_endpoint", "/v1/map-infrastructure")
         _inc("requests_by_mode", "osint")
@@ -1162,11 +1085,11 @@ def build_app(client, model: str):
         data = request.get_json(force=True, silent=True)
         if not isinstance(data, dict):
             _inc("errors_total")
-            return _error_response("JSON object body required", 400, mode="osint")
+            return jsonify({"error": "JSON object body required"}), 400
         indicators = data.get("indicators", [])
         if not indicators:
             _inc("errors_total")
-            return _error_response("indicators required", 400, mode="osint")
+            return jsonify({"error": "indicators required"}), 400
 
         try:
             from collectors.osint_geolocation import InfrastructureMapper
@@ -1174,18 +1097,9 @@ def build_app(client, model: str):
             mapping = mapper.map_infrastructure(indicators)
             return jsonify(mapping)
         except Exception as exc:
-            logger.exception(
-                "osint_map_infrastructure_error",
-                extra={
-                    "event": "osint_map_infrastructure_error",
-                    "endpoint": request.path,
-                    "mode": "osint",
-                    "request_id": get_request_id(),
-                    "error": str(exc),
-                },
-            )
+            logger.exception("Error in /v1/map-infrastructure endpoint: %s", exc)
             _inc("errors_total")
-            return _error_response("Internal server error", 500, mode="osint")
+            return jsonify({"error": "Internal server error"}), 500
 
     return app  # ← returned for testing
 
@@ -1224,29 +1138,9 @@ def _send_notification(source: str, severity: str, alert: str, triage: str):
             urllib.request.urlopen(req, timeout=5)  # nosec B310
             logger.info("Slack webhook notification sent successfully")
         except urllib.error.URLError as exc:
-            logger.warning(
-                "slack_webhook_send_failed",
-                extra={
-                    "event": "slack_webhook_send_failed",
-                    "mode": "soc",
-                    "request_id": get_request_id(),
-                    "source": source,
-                    "severity": severity,
-                    "error": str(exc),
-                },
-            )
+            logger.warning("Failed to send Slack notification: %s", exc)
         except Exception as exc:
-            logger.error(
-                "slack_webhook_send_error",
-                extra={
-                    "event": "slack_webhook_send_error",
-                    "mode": "soc",
-                    "request_id": get_request_id(),
-                    "source": source,
-                    "severity": severity,
-                    "error": str(exc),
-                },
-            )
+            logger.error("Unexpected error sending Slack notification: %s", exc)
 
     if teams_url:
         payload = json.dumps({
@@ -1263,29 +1157,9 @@ def _send_notification(source: str, severity: str, alert: str, triage: str):
             urllib.request.urlopen(req, timeout=5)  # nosec B310
             logger.info("Teams webhook notification sent successfully")
         except urllib.error.URLError as exc:
-            logger.warning(
-                "teams_webhook_send_failed",
-                extra={
-                    "event": "teams_webhook_send_failed",
-                    "mode": "soc",
-                    "request_id": get_request_id(),
-                    "source": source,
-                    "severity": severity,
-                    "error": str(exc),
-                },
-            )
+            logger.warning("Failed to send Teams notification: %s", exc)
         except Exception as exc:
-            logger.error(
-                "teams_webhook_send_error",
-                extra={
-                    "event": "teams_webhook_send_error",
-                    "mode": "soc",
-                    "request_id": get_request_id(),
-                    "source": source,
-                    "severity": severity,
-                    "error": str(exc),
-                },
-            )
+            logger.error("Unexpected error sending Teams notification: %s", exc)
 
 
 def run_server(client, model: str, port: int):

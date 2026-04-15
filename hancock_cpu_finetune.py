@@ -28,6 +28,7 @@ from pathlib import Path
 DATASET_PATH = Path(__file__).parent / "data" / "hancock_v2.jsonl"
 OUTPUT_DIR   = Path(__file__).parent / "hancock-cpu-adapter"
 MODEL_NAME   = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+MODEL_REVISION = "fe8a4ea1ffedaf415f4da2f062534de366a451e6"
 MAX_SEQ_LEN  = 1024   # keep low for CPU RAM
 LORA_R       = 8
 LORA_ALPHA   = 16
@@ -172,7 +173,10 @@ def main():
     # ── Tokenizer ──────────────────────────────────────────────────────────────
     print(f"\n[3/6] Loading tokenizer: {MODEL_NAME}")
     print("      (first run downloads ~500MB — subsequent runs use cache)")
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)  # nosec B615
+    tokenizer = AutoTokenizer.from_pretrained(
+        MODEL_NAME,
+        revision=MODEL_REVISION,
+    )
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
 
@@ -205,6 +209,7 @@ def main():
 
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
+        revision=MODEL_REVISION,
         quantization_config=quant_config,   # ← QLoRA enabled
         device_map='cpu',
         torch_dtype=torch.float32,
@@ -350,7 +355,11 @@ def run_test():
     if not OUTPUT_DIR.exists():
         sys.exit(f"ERROR: No adapter at {OUTPUT_DIR}. Run fine-tune first.")
 
-    base_model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.float32)  # nosec B615
+    base_model = AutoModelForCausalLM.from_pretrained(
+        MODEL_NAME,
+        revision=MODEL_REVISION,
+        torch_dtype=torch.float32,
+    )
     tokenizer  = AutoTokenizer.from_pretrained(OUTPUT_DIR)  # nosec B615
     model      = PeftModel.from_pretrained(base_model, str(OUTPUT_DIR))
     model.eval()

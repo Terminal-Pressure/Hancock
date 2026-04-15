@@ -3,7 +3,7 @@
 # Licensed under the CyberViser Proprietary License — see LICENSE for details.
 # Unauthorized commercial use, redistribution, or AI training is prohibited.
 """
-Hancock Agent — NVIDIA NIM Inference Backend
+Hancock Agent — Multi-backend Inference (Ollama → NVIDIA NIM/OpenAI fallback)
 CyberViser | hancock_agent.py
 
 Two modes:

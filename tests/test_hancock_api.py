@@ -503,6 +503,13 @@ class TestMetrics:
 # ── /internal/diagnostics ─────────────────────────────────────────────────────
 
 class TestInternalDiagnostics:
+    @staticmethod
+    def _counter_value(metrics_text, metric_name):
+        for line in metrics_text.splitlines():
+            if line.startswith(f"{metric_name} "):
+                return int(float(line.split()[-1]))
+        raise AssertionError(f"missing metric line for {metric_name}")
+
     @pytest.fixture
     def diagnostics_disabled_app(self):
         """App with internal diagnostics explicitly disabled."""
@@ -629,13 +636,9 @@ class TestInternalDiagnostics:
         assert r.status_code == 200
         assert 'hancock_requests_by_endpoint{endpoint="/internal/diagnostics"}' in after
 
-        def _counter_value(metrics_text, metric_name):
-            for line in metrics_text.splitlines():
-                if line.startswith(f"{metric_name} "):
-                    return int(float(line.split()[-1]))
-            raise AssertionError(f"missing metric line for {metric_name}")
-
-        assert _counter_value(after, "hancock_requests_total") == _counter_value(before, "hancock_requests_total") + 1
+        assert self._counter_value(after, "hancock_requests_total") == self._counter_value(
+            before, "hancock_requests_total"
+        ) + 1
 
 
 # ── /v1/sigma ─────────────────────────────────────────────────────────────────

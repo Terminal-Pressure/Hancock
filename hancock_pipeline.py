@@ -11,68 +11,74 @@ Usage:
     python hancock_pipeline.py --phase 3 # all sources + format v3
 """
 from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path
 
+from collectors.registry import build_default_registry
+
 DATA_DIR = Path(__file__).parent / "data"
+
+REGISTRY = build_default_registry()
+
+PHASE_COLLECTOR_ORDER: dict[int, list[str]] = {
+    1: ["pentest-kb", "soc-kb"],
+    2: ["mitre", "nvd", "ghsa", "atomic", "formatter-v2"],
+    3: ["pentest-kb", "soc-kb", "mitre", "nvd", "kev", "ghsa", "atomic", "formatter-v3"],
+}
+
+
+def run_collector(collector_id: str, data_dir: Path = DATA_DIR) -> None:
+    """Run a collector from the registry by id."""
+    # data_dir is kept in the signature for future collector extensibility.
+    del data_dir
+    REGISTRY.run(collector_id)
 
 
 def run_kev(data_dir: Path = DATA_DIR) -> None:
     """Collect CISA Known Exploited Vulnerabilities."""
-    from collectors.cisa_kev_collector import collect
-    collect()
+    run_collector("kev", data_dir)
 
 
 def run_atomic(data_dir: Path = DATA_DIR) -> None:
     """Collect Atomic Red Team tests."""
-    from collectors.atomic_collector import collect
-    collect()
+    run_collector("atomic", data_dir)
 
 
 def run_ghsa(data_dir: Path = DATA_DIR) -> None:
     """Collect GitHub Security Advisories."""
-    from collectors.ghsa_collector import collect
-    collect()
+    run_collector("ghsa", data_dir)
 
 
 def run_formatter_v3() -> None:
     """Format all v3 data sources into hancock_v3.jsonl."""
-    from collectors.formatter_v3 import format_all
-    format_all()
+    run_collector("formatter-v3")
 
 
 def run_kb(data_dir: Path = DATA_DIR) -> None:
     """Build pentest knowledge base."""
-    from collectors.pentest_kb import build
-    build()
+    run_collector("pentest-kb", data_dir)
 
 
 def run_soc_kb(data_dir: Path = DATA_DIR) -> None:
     """Build SOC knowledge base."""
-    from collectors.soc_kb import build
-    build()
+    run_collector("soc-kb", data_dir)
 
 
 def run_mitre(data_dir: Path = DATA_DIR) -> None:
     """Collect MITRE ATT&CK data."""
-    from collectors.mitre_collector import collect
-    collect()
+    run_collector("mitre", data_dir)
 
 
 def run_nvd(data_dir: Path = DATA_DIR) -> None:
     """Collect NVD CVE data."""
-    from collectors.nvd_collector import collect
-    collect()
+    run_collector("nvd", data_dir)
 
 
 def run_formatter(v2: bool = False) -> None:
     """Format collected data into JSONL training samples."""
-    if v2:
-        from formatter.to_mistral_jsonl_v2 import format_all
-    else:
-        from formatter.to_mistral_jsonl import format_all
-    format_all()
+    run_collector("formatter-v2" if v2 else "formatter-v3")
 
 
 def run_osint_geolocation(target: str) -> dict:
@@ -91,18 +97,15 @@ def run_osint_geolocation(target: str) -> dict:
     mapper = InfrastructureMapper()
 
     try:
-        # Determine whether target is an IP or domain
         import socket
+
         try:
             socket.inet_aton(target)
             results = [geo.lookup_ip(target)]
         except OSError:
             results = geo.lookup_domain(target)
 
-        # Enrich with threat intel (gracefully degrades without API keys)
         enriched = [geo.enrich_with_threat_intel(r) for r in results]
-
-        # Map infrastructure (groups by ASN/country/ISP)
         mapping = mapper.map_infrastructure([target])
 
         return {
@@ -123,23 +126,25 @@ def run_full_assessment(target: str) -> None:
         if tool == "nmap":
             try:
                 from collectors.nmap_recon import run_nmap
+
                 run_nmap(target)
             except Exception as exc:
                 print(f"[pipeline] nmap step skipped: {exc}")
         elif tool == "sqlmap":
             try:
                 from collectors.sqlmap_exploit import SQLMapAPI
+
                 print(f"[pipeline] sqlmap step ready for {target}")
             except Exception as exc:
                 print(f"[pipeline] sqlmap step skipped: {exc}")
         elif tool == "burp":
             try:
                 from collectors.burp_post_exploit import BurpAPI
+
                 print(f"[pipeline] burp step ready for {target}")
             except Exception as exc:
                 print(f"[pipeline] burp step skipped: {exc}")
 
-    # OSINT geolocation enrichment
     try:
         osint_result = run_osint_geolocation(target)
         if osint_result and not osint_result.get("error"):
@@ -155,39 +160,36 @@ def run_full_assessment(target: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hancock data pipeline")
     parser.add_argument(
-        "--phase", type=int, choices=[1, 2, 3], default=3,
+        "--phase",
+        type=int,
+        choices=[1, 2, 3],
+        default=3,
         help="Pipeline phase: 1=KB only, 2=CVE/GHSA/Atomic+v2, 3=all+v3 (default)",
     )
     parser.add_argument(
-        "--data-dir", type=Path, default=DATA_DIR,
+        "--data-dir",
+        type=Path,
+        default=DATA_DIR,
         help="Directory for raw/processed data files",
     )
+    parser.add_argument(
+        "--list-collectors",
+        action="store_true",
+        help="List registered collectors and exit.",
+    )
     args = parser.parse_args()
+
+    if args.list_collectors:
+        for spec in REGISTRY.list_collectors():
+            print(f"{spec.collector_id}: {spec.module}.{spec.entrypoint}")
+        return
 
     data_dir: Path = args.data_dir
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.phase == 1:
-        print("[pipeline] Phase 1: building KB datasets…")
-        run_kb(data_dir)
-        run_soc_kb(data_dir)
-    elif args.phase == 2:
-        print("[pipeline] Phase 2: collecting CVE / GHSA / Atomic…")
-        run_mitre(data_dir)
-        run_nvd(data_dir)
-        run_ghsa(data_dir)
-        run_atomic(data_dir)
-        run_formatter(v2=True)
-    else:
-        print("[pipeline] Phase 3: full data collection + v3 format…")
-        run_kb(data_dir)
-        run_soc_kb(data_dir)
-        run_mitre(data_dir)
-        run_nvd(data_dir)
-        run_kev(data_dir)
-        run_ghsa(data_dir)
-        run_atomic(data_dir)
-        run_formatter_v3()
+    print(f"[pipeline] Phase {args.phase}: executing registered collectors…")
+    for collector_id in PHASE_COLLECTOR_ORDER[args.phase]:
+        run_collector(collector_id, data_dir)
 
     print("[pipeline] Done.")
 

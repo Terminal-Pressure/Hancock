@@ -10,6 +10,7 @@ import pytest
 EXPECTED_ENDPOINTS = {
     "/health",
     "/metrics",
+    "/internal/diagnostics",
     "/v1/agents",
     "/v1/chat",
     "/v1/ask",

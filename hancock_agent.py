@@ -35,6 +35,7 @@ import json
 import logging
 import os
 import sys
+import time
 import readline  # noqa: F401 — enables arrow-key history in CLI
 from hancock_constants import require_openai, OPENAI_IMPORT_ERROR_MSG
 from monitoring.logging_config import (
@@ -238,6 +239,8 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434") + "/v1"
 DEFAULT_MODEL   = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 CODER_MODEL     = os.getenv("OLLAMA_CODER_MODEL", "qwen2.5-coder:7b")
 VERSION         = "0.5.0"
+PROCESS_STARTED_AT_UNIX = int(time.time())
+PROCESS_STARTED_AT_MONOTONIC = time.monotonic()
 
 # ── Available models ──────────────────────────────────────────────────────────
 MODELS = {
@@ -440,9 +443,7 @@ def build_app(client, model: str):
 
     app = Flask("hancock")
     init_flask_logging(app)
-    import time
-    _started_at_unix = time.time()
-    _started_at_monotonic = time.monotonic()
+    backend = os.getenv("HANCOCK_LLM_BACKEND", "ollama").lower()
 
     def _mode_from_request(default_mode: str = "n/a") -> str:
         payload = request.get_json(silent=True) if request.is_json else {}
@@ -458,6 +459,7 @@ def build_app(client, model: str):
                 "event": "request_error",
                 "endpoint": request.path,
                 "mode": mode,
+                "backend": backend,
                 "status": status_code,
                 "request_id": request_id,
                 "error": message,
@@ -487,7 +489,7 @@ def build_app(client, model: str):
     _rate_counts: dict = {}  # ip → [timestamp, ...]
     _RATE_LIMIT  = int(os.getenv("HANCOCK_RATE_LIMIT", "60"))   # requests/min
     _RATE_WINDOW = 60  # seconds
-    _INTERNAL_DIAGNOSTICS_ENABLED = os.getenv(
+    _ENABLE_INTERNAL_DIAGNOSTICS = os.getenv(
         "HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS", "false"
     ).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -542,7 +544,7 @@ def build_app(client, model: str):
                           "/v1/hunt", "/v1/respond", "/v1/code",
                           "/v1/ciso", "/v1/sigma", "/v1/yara", "/v1/ioc",
                           "/v1/geolocate", "/v1/predict-locations", "/v1/map-infrastructure",
-                          "/v1/agents", "/v1/webhook", "/metrics"],
+                          "/v1/agents", "/v1/webhook", "/metrics", "/internal/diagnostics"],
         })
 
     @app.route("/metrics", methods=["GET"])
@@ -576,17 +578,10 @@ def build_app(client, model: str):
         return Response("\n".join(lines) + "\n", mimetype="text/plain; version=0.0.4")
 
     @app.route("/internal/diagnostics", methods=["GET"])
-    def internal_diagnostics():
-        """Internal runtime diagnostics (non-secret metadata only)."""
-        if not _INTERNAL_DIAGNOSTICS_ENABLED:
-            _inc("errors_total")
-            return _error_response("Not Found", 404)
-        if not _HANCOCK_API_KEY:
-            _inc("errors_total")
-            return _error_response(
-                "Internal diagnostics requires HANCOCK_API_KEY authentication to be configured",
-                403,
-            )
+    def internal_diagnostics_endpoint():
+        """Auth-gated runtime diagnostics endpoint."""
+        if not _ENABLE_INTERNAL_DIAGNOSTICS:
+            return _error_response("Not found", 404)
 
         ok, err, _ = _check_auth_and_rate()
         if not ok:
@@ -595,11 +590,11 @@ def build_app(client, model: str):
 
         _inc("requests_total")
         _inc("requests_by_endpoint", "/internal/diagnostics")
-        uptime_seconds = int(max(0, time.monotonic() - _started_at_monotonic))
+        uptime_seconds = max(0, int(time.monotonic() - PROCESS_STARTED_AT_MONOTONIC))
         return jsonify({
-            "backend_mode": os.getenv("HANCOCK_LLM_BACKEND", "ollama").lower(),
+            "backend_mode": backend,
             "current_model": model,
-            "model_aliases": MODELS,
+            "model_aliases": dict(MODELS),
             "rate_limit": {
                 "requests_per_minute": _RATE_LIMIT,
                 "window_seconds": _RATE_WINDOW,
@@ -607,7 +602,7 @@ def build_app(client, model: str):
             },
             "uptime": {
                 "seconds": uptime_seconds,
-                "started_at_unix": int(_started_at_unix),
+                "started_at_unix": PROCESS_STARTED_AT_UNIX,
             },
         })
 

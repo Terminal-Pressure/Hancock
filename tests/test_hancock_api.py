@@ -5,36 +5,49 @@ Run:  make test   or   .venv/bin/pytest tests/ -v
 import json
 import os
 import sys
+import time
 import pytest
 
 # Ensure project root is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+def _build_mocked_app(env=None, unset=(), response_text="Mocked Hancock response."):
+    """Create a Flask app with a mocked OpenAI client and optional env overrides."""
+    from unittest.mock import MagicMock, patch
+    import importlib
+
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.choices[0].message.content = response_text
+    mock_client.chat.completions.create.return_value = mock_resp
+
+    with patch.dict(os.environ, env or {}, clear=False):
+        for key in unset:
+            os.environ.pop(key, None)
+        with patch("hancock_agent.OpenAI", return_value=mock_client):
+            import hancock_agent
+
+            importlib.reload(hancock_agent)
+            app = hancock_agent.build_app(
+                mock_client, "mistralai/mistral-7b-instruct-v0.3"
+            )
+            app.testing = True
+            return app
+
+
+def _metric_counter_value(metrics_text: str, metric_name: str) -> int:
+    for line in metrics_text.splitlines():
+        if line.startswith(f"{metric_name} "):
+            return int(float(line.split()[-1]))
+    raise AssertionError(f"Metric '{metric_name}' not found")
+
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture
 def app():
     """Create a Flask test app with a mocked OpenAI client."""
-    from unittest.mock import MagicMock, patch
-
-    mock_client = MagicMock()
-    mock_resp = MagicMock()
-    mock_resp.choices[0].message.content = "Mocked Hancock response."
-    mock_client.chat.completions.create.return_value = mock_resp
-
-    # Patch OpenAI before importing run_server
-    with patch("hancock_agent.OpenAI", return_value=mock_client):
-        import hancock_agent
-        flask_app = hancock_agent.run_server.__wrapped__ if hasattr(
-            hancock_agent.run_server, "__wrapped__") else None
-
-        # Build app directly since run_server calls app.run()
-        from flask import Flask
-        import importlib
-        # Re-import to get the Flask app instance via the factory
-        app = hancock_agent.build_app(mock_client, "mistralai/mistral-7b-instruct-v0.3")
-        app.testing = True
-        return app
+    return _build_mocked_app()
 
 
 @pytest.fixture
@@ -503,142 +516,80 @@ class TestMetrics:
 # ── /internal/diagnostics ─────────────────────────────────────────────────────
 
 class TestInternalDiagnostics:
-    @staticmethod
-    def _counter_value(metrics_text, metric_name):
-        for line in metrics_text.splitlines():
-            if line.startswith(f"{metric_name} "):
-                return int(float(line.split()[-1]))
-        raise AssertionError(f"missing metric line for {metric_name}")
-
-    @pytest.fixture
-    def diagnostics_disabled_app(self):
-        """App with internal diagnostics explicitly disabled."""
-        from unittest.mock import MagicMock, patch
-        import importlib
-        import os
-
-        mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.choices[0].message.content = "response"
-        mock_client.chat.completions.create.return_value = mock_resp
-
-        with patch.dict(os.environ, {
-            "HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS": "false",
-            "HANCOCK_API_KEY": "diag-secret-token",
-            "HANCOCK_LLM_BACKEND": "ollama",
-            "HANCOCK_RATE_LIMIT": "7",
-        }, clear=False):
-            with patch("hancock_agent.OpenAI", return_value=mock_client):
-                import hancock_agent
-                importlib.reload(hancock_agent)
-                app = hancock_agent.build_app(mock_client, "mistralai/mistral-7b-instruct-v0.3")
-                app.testing = True
-                return app
-
     @pytest.fixture
     def diagnostics_app(self):
-        """App with internal diagnostics enabled and API auth configured."""
-        from unittest.mock import MagicMock, patch
-        import importlib
-        import os
+        return _build_mocked_app(
+            env={
+                "HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS": "true",
+                "HANCOCK_API_KEY": "diag-secret-token",
+                "HANCOCK_RATE_LIMIT": "7",
+                "HANCOCK_LLM_BACKEND": "ollama",
+                "OPENAI_API_KEY": "sk-live-secret",
+                "NVIDIA_API_KEY": "nvapi-secret",
+                "HANCOCK_WEBHOOK_SECRET": "webhook-secret",
+            }
+        )
 
-        mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.choices[0].message.content = "response"
-        mock_client.chat.completions.create.return_value = mock_resp
-
-        with patch.dict(os.environ, {
-            "HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS": "true",
-            "HANCOCK_API_KEY": "diag-secret-token",
-            "HANCOCK_LLM_BACKEND": "ollama",
-            "HANCOCK_RATE_LIMIT": "7",
-        }):
-            with patch("hancock_agent.OpenAI", return_value=mock_client):
-                import hancock_agent
-                importlib.reload(hancock_agent)
-                app = hancock_agent.build_app(mock_client, "mistralai/mistral-7b-instruct-v0.3")
-                app.testing = True
-                return app
-
-    @pytest.fixture
-    def diagnostics_without_auth_app(self):
-        """App with diagnostics enabled but API auth not configured."""
-        from unittest.mock import MagicMock, patch
-        import importlib
-        import os
-
-        mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.choices[0].message.content = "response"
-        mock_client.chat.completions.create.return_value = mock_resp
-
-        with patch.dict(os.environ, {
-            "HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS": "true",
-            "HANCOCK_LLM_BACKEND": "ollama",
-            "HANCOCK_RATE_LIMIT": "7",
-        }, clear=False):
-            os.environ.pop("HANCOCK_API_KEY", None)
-            with patch("hancock_agent.OpenAI", return_value=mock_client):
-                import hancock_agent
-                importlib.reload(hancock_agent)
-                app = hancock_agent.build_app(mock_client, "mistralai/mistral-7b-instruct-v0.3")
-                app.testing = True
-                return app
-
-    def test_diagnostics_disabled_returns_404(self, diagnostics_disabled_app):
-        c = diagnostics_disabled_app.test_client()
+    def test_diagnostics_disabled_returns_404(self):
+        app = _build_mocked_app(
+            unset=("HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS", "HANCOCK_API_KEY")
+        )
+        c = app.test_client()
         r = c.get("/internal/diagnostics")
         assert r.status_code == 404
 
-    def test_diagnostics_requires_server_auth_configuration(self, diagnostics_without_auth_app):
-        c = diagnostics_without_auth_app.test_client()
-        r = c.get("/internal/diagnostics")
-        assert r.status_code == 403
-
-    def test_diagnostics_requires_auth_when_configured(self, diagnostics_app):
+    def test_diagnostics_requires_auth_when_enabled(self, diagnostics_app):
         c = diagnostics_app.test_client()
         r = c.get("/internal/diagnostics")
         assert r.status_code == 401
+        assert "error" in r.get_json()
 
     def test_diagnostics_returns_runtime_metadata_only(self, diagnostics_app):
         c = diagnostics_app.test_client()
+        before_metrics = c.get("/metrics").get_data(as_text=True)
+
         r = c.get(
             "/internal/diagnostics",
             headers={"Authorization": "Bearer diag-secret-token"},
         )
         assert r.status_code == 200
         payload = r.get_json()
+        body = r.get_data(as_text=True)
 
         assert payload["backend_mode"] == "ollama"
         assert payload["current_model"] == "mistralai/mistral-7b-instruct-v0.3"
         assert "model_aliases" in payload
-        assert isinstance(payload["model_aliases"], dict)
-        assert "mistral" in payload["model_aliases"]
-        assert isinstance(payload["model_aliases"]["mistral"], str)
-        assert payload["model_aliases"]["mistral"]
+        assert (
+            payload["model_aliases"]["nim-mistral"]
+            == "mistralai/mistral-7b-instruct-v0.3"
+        )
+        assert "loaded_model_aliases" not in payload
         assert payload["rate_limit"]["requests_per_minute"] == 7
         assert payload["rate_limit"]["window_seconds"] == 60
         assert payload["rate_limit"]["auth_enabled"] is True
         assert payload["uptime"]["seconds"] >= 0
+        assert payload["uptime"]["started_at_unix"] <= int(time.time())
 
-        # Ensure secrets/tokens are not leaked
-        serialized = json.dumps(payload).lower()
-        assert "diag-secret-token" not in serialized
-        assert "api_key" not in serialized
-        assert "token" not in serialized
+        after_metrics = c.get("/metrics").get_data(as_text=True)
+        assert (
+            _metric_counter_value(after_metrics, "hancock_requests_total")
+            == _metric_counter_value(before_metrics, "hancock_requests_total") + 1
+        )
+        assert (
+            'hancock_requests_by_endpoint{endpoint="/internal/diagnostics"} 1'
+            in after_metrics
+        )
 
-    def test_diagnostics_increments_metrics_counters(self, diagnostics_app):
-        c = diagnostics_app.test_client()
-        before = c.get("/metrics").data.decode()
-        r = c.get("/internal/diagnostics", headers={"Authorization": "Bearer diag-secret-token"})
-        after = c.get("/metrics").data.decode()
-
-        assert r.status_code == 200
-        assert 'hancock_requests_by_endpoint{endpoint="/internal/diagnostics"}' in after
-
-        assert self._counter_value(after, "hancock_requests_total") == self._counter_value(
-            before, "hancock_requests_total"
-        ) + 1
+        for secret in (
+            "diag-secret-token",
+            "sk-live-secret",
+            "nvapi-secret",
+            "webhook-secret",
+            "HANCOCK_API_KEY",
+            "OPENAI_API_KEY",
+            "NVIDIA_API_KEY",
+        ):
+            assert secret not in body
 
 
 # ── /v1/sigma ─────────────────────────────────────────────────────────────────

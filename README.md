@@ -49,6 +49,7 @@ It operates in nine specialist modes and exposes a clean REST API.
 - [API Reference](#-api-reference)
 - [CLI Commands](#-cli-commands)
 - [Environment Variables](#-environment-variables)
+- [Backend Selection](#-backend-selection)
 - [OSINT Geolocation Intelligence](#-osint-geolocation-intelligence)
 - [Security Tool Integrations](#-security-tool-integrations)
 - [Client SDKs](#-client-sdks)
@@ -258,7 +259,7 @@ curl -X POST http://localhost:5000/v1/respond \
 /mode osint     — OSINT geolocation intelligence analyst
 /clear          — clear conversation history
 /history        — show history
-/model <id>     — switch NVIDIA NIM model
+/model <id>     — switch active model
 /exit           — quit
 ```
 
@@ -293,6 +294,22 @@ cp .env.example .env
 | `HANCOCK_ALLOW_INSECURE_GEOIP` | Allow plaintext `ip-api.com` fallback for OSINT lookups | disabled |
 | `ABUSEIPDB_KEY` | AbuseIPDB API key (threat enrichment) | — |
 | `VT_API_KEY` | VirusTotal API key (threat enrichment) | — |
+
+---
+
+## 🔀 Backend Selection
+
+Hancock uses one canonical backend selection strategy:
+
+1. **Primary backend** from `HANCOCK_LLM_BACKEND` (default: `ollama`).
+   - `ollama` uses `OLLAMA_BASE_URL` + `OLLAMA_MODEL` / `OLLAMA_CODER_MODEL`
+   - `nvidia` uses NVIDIA NIM (`NVIDIA_API_KEY`) and `HANCOCK_MODEL` / `HANCOCK_CODER_MODEL`
+   - `openai` uses `OPENAI_API_KEY` and `OPENAI_MODEL` / `OPENAI_CODER_MODEL`
+2. **Automatic runtime fallback**: if a primary Ollama or NVIDIA request fails, Hancock retries with OpenAI when `OPENAI_API_KEY` is configured.
+3. **Startup fallback**: if the configured backend cannot initialize, Hancock attempts OpenAI before exiting.
+
+This fallback order is therefore:
+**configured primary (`ollama`/`nvidia`/`openai`) → OpenAI (if configured) → exit with configuration error.**
 
 ---
 

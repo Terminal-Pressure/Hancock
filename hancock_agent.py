@@ -599,7 +599,7 @@ def build_app(client, model: str):
         return jsonify({
             "backend_mode": os.getenv("HANCOCK_LLM_BACKEND", "ollama").lower(),
             "current_model": model,
-            "loaded_model_aliases": sorted(MODELS.keys()),
+            "model_aliases": MODELS,
             "rate_limit": {
                 "requests_per_minute": _RATE_LIMIT,
                 "window_seconds": _RATE_WINDOW,

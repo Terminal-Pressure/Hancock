@@ -504,6 +504,31 @@ class TestMetrics:
 
 class TestInternalDiagnostics:
     @pytest.fixture
+    def diagnostics_disabled_app(self):
+        """App with internal diagnostics explicitly disabled."""
+        from unittest.mock import MagicMock, patch
+        import importlib
+        import os
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.choices[0].message.content = "response"
+        mock_client.chat.completions.create.return_value = mock_resp
+
+        with patch.dict(os.environ, {
+            "HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS": "false",
+            "HANCOCK_API_KEY": "diag-secret-token",
+            "HANCOCK_LLM_BACKEND": "ollama",
+            "HANCOCK_RATE_LIMIT": "7",
+        }, clear=False):
+            with patch("hancock_agent.OpenAI", return_value=mock_client):
+                import hancock_agent
+                importlib.reload(hancock_agent)
+                app = hancock_agent.build_app(mock_client, "mistralai/mistral-7b-instruct-v0.3")
+                app.testing = True
+                return app
+
+    @pytest.fixture
     def diagnostics_app(self):
         """App with internal diagnostics enabled and API auth configured."""
         from unittest.mock import MagicMock, patch
@@ -553,8 +578,9 @@ class TestInternalDiagnostics:
                 app.testing = True
                 return app
 
-    def test_diagnostics_disabled_returns_404(self, client):
-        r = client.get("/internal/diagnostics")
+    def test_diagnostics_disabled_returns_404(self, diagnostics_disabled_app):
+        c = diagnostics_disabled_app.test_client()
+        r = c.get("/internal/diagnostics")
         assert r.status_code == 404
 
     def test_diagnostics_requires_server_auth_configuration(self, diagnostics_without_auth_app):
@@ -578,9 +604,11 @@ class TestInternalDiagnostics:
 
         assert payload["backend_mode"] == "ollama"
         assert payload["current_model"] == "mistralai/mistral-7b-instruct-v0.3"
-        assert "loaded_model_aliases" in payload
-        assert isinstance(payload["loaded_model_aliases"], list)
-        assert "mistral" in payload["loaded_model_aliases"]
+        assert "model_aliases" in payload
+        assert isinstance(payload["model_aliases"], dict)
+        assert "mistral" in payload["model_aliases"]
+        assert isinstance(payload["model_aliases"]["mistral"], str)
+        assert payload["model_aliases"]["mistral"]
         assert payload["rate_limit"]["requests_per_minute"] == 7
         assert payload["rate_limit"]["window_seconds"] == 60
         assert payload["rate_limit"]["auth_enabled"] is True
@@ -591,6 +619,23 @@ class TestInternalDiagnostics:
         assert "diag-secret-token" not in serialized
         assert "api_key" not in serialized
         assert "token" not in serialized
+
+    def test_diagnostics_increments_metrics_counters(self, diagnostics_app):
+        c = diagnostics_app.test_client()
+        before = c.get("/metrics").data.decode()
+        r = c.get("/internal/diagnostics", headers={"Authorization": "Bearer diag-secret-token"})
+        after = c.get("/metrics").data.decode()
+
+        assert r.status_code == 200
+        assert 'hancock_requests_by_endpoint{endpoint="/internal/diagnostics"}' in after
+
+        def _counter_value(metrics_text, metric_name):
+            for line in metrics_text.splitlines():
+                if line.startswith(f"{metric_name} "):
+                    return int(float(line.split()[-1]))
+            raise AssertionError(f"missing metric line for {metric_name}")
+
+        assert _counter_value(after, "hancock_requests_total") == _counter_value(before, "hancock_requests_total") + 1
 
 
 # ── /v1/sigma ─────────────────────────────────────────────────────────────────

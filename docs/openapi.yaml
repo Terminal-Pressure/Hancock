@@ -119,9 +119,9 @@ paths:
                 properties:
                   backend_mode: { type: string, example: ollama }
                   current_model: { type: string }
-                  loaded_model_aliases:
-                    type: array
-                    items: { type: string }
+                  model_aliases:
+                    type: object
+                    description: Mapping of model alias names to resolved model IDs.
                   rate_limit:
                     type: object
                     properties:

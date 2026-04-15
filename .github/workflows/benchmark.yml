@@ -43,10 +43,12 @@ jobs:
             --junitxml=artifacts/benchmark-junit.xml
 
       - name: Print benchmark summary table
+        if: always()
         run: |
           python tests/benchmark_suite.py | tee artifacts/benchmark-summary.txt
 
       - name: Upload benchmark artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-artifacts

@@ -142,6 +142,7 @@ Start the server: `python hancock_agent.py --server`
 |--------|----------|-------------|
 | `GET`  | `/health`       | Agent status and capabilities |
 | `GET`  | `/metrics`      | Prometheus-compatible request counters |
+| `GET`  | `/internal/diagnostics` | Internal runtime diagnostics (requires `HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS=true`) |
 | `GET`  | `/v1/agents`    | All agent system prompts and defaults |
 | `POST` | `/v1/chat`      | Conversational AI with history + streaming |
 | `POST` | `/v1/ask`       | Single-shot question |
@@ -186,6 +187,12 @@ curl -X POST http://localhost:5000/v1/sigma \
 curl -X POST http://localhost:5000/v1/yara \
   -H "Content-Type: application/json" \
   -d '{"description": "Cobalt Strike beacon default HTTP profile", "file_type": "PE"}'
+```
+
+**Internal Diagnostics (runtime visibility):**
+```bash
+curl http://localhost:5000/internal/diagnostics \
+  -H "Authorization: Bearer $HANCOCK_API_KEY"
 ```
 
 **IOC Enrichment:**
@@ -287,6 +294,7 @@ cp .env.example .env
 | `HANCOCK_PORT` | REST API server port | `5000` |
 | `HANCOCK_API_KEY` | Bearer token for API auth (empty = no auth) | — |
 | `HANCOCK_RATE_LIMIT` | Max requests per IP per minute | `60` |
+| `HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS` | Enable `/internal/diagnostics` endpoint for non-secret runtime metadata | `false` |
 | `HANCOCK_WEBHOOK_SECRET` | HMAC-SHA256 secret for `/v1/webhook` | — |
 | `HANCOCK_SLACK_WEBHOOK` | Slack incoming webhook URL | — |
 | `HANCOCK_TEAMS_WEBHOOK` | Microsoft Teams incoming webhook URL | — |

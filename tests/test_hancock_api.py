@@ -500,6 +500,68 @@ class TestMetrics:
         assert b'/v1/ask' in r.data
 
 
+# ── /internal/diagnostics ─────────────────────────────────────────────────────
+
+class TestInternalDiagnostics:
+    @pytest.fixture
+    def diagnostics_app(self):
+        """App with internal diagnostics enabled and API auth configured."""
+        from unittest.mock import MagicMock, patch
+        import importlib
+        import os
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.choices[0].message.content = "response"
+        mock_client.chat.completions.create.return_value = mock_resp
+
+        with patch.dict(os.environ, {
+            "HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS": "true",
+            "HANCOCK_API_KEY": "diag-secret-token",
+            "HANCOCK_LLM_BACKEND": "ollama",
+            "HANCOCK_RATE_LIMIT": "7",
+        }):
+            with patch("hancock_agent.OpenAI", return_value=mock_client):
+                import hancock_agent
+                importlib.reload(hancock_agent)
+                app = hancock_agent.build_app(mock_client, "mistralai/mistral-7b-instruct-v0.3")
+                app.testing = True
+                return app
+
+    def test_diagnostics_disabled_returns_404(self, client):
+        r = client.get("/internal/diagnostics")
+        assert r.status_code == 404
+
+    def test_diagnostics_requires_auth_when_configured(self, diagnostics_app):
+        c = diagnostics_app.test_client()
+        r = c.get("/internal/diagnostics")
+        assert r.status_code == 401
+
+    def test_diagnostics_returns_runtime_metadata_only(self, diagnostics_app):
+        c = diagnostics_app.test_client()
+        r = c.get(
+            "/internal/diagnostics",
+            headers={"Authorization": "Bearer diag-secret-token"},
+        )
+        assert r.status_code == 200
+        payload = r.get_json()
+
+        assert payload["backend_mode"] == "ollama"
+        assert payload["current_model"] == "mistralai/mistral-7b-instruct-v0.3"
+        assert "loaded_model_aliases" in payload
+        assert "mistral" in payload["loaded_model_aliases"]
+        assert payload["rate_limit"]["requests_per_minute"] == 7
+        assert payload["rate_limit"]["window_seconds"] == 60
+        assert payload["rate_limit"]["auth_enabled"] is True
+        assert payload["uptime"]["seconds"] >= 0
+
+        # Ensure secrets/tokens are not leaked
+        serialized = json.dumps(payload).lower()
+        assert "diag-secret-token" not in serialized
+        assert "api_key" not in serialized
+        assert "token" not in serialized
+
+
 # ── /v1/sigma ─────────────────────────────────────────────────────────────────
 
 class TestSigma:

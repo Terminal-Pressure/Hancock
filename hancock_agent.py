@@ -440,6 +440,9 @@ def build_app(client, model: str):
 
     app = Flask("hancock")
     init_flask_logging(app)
+    import time
+    _started_at_unix = time.time()
+    _started_at_monotonic = time.monotonic()
 
     def _mode_from_request(default_mode: str = "n/a") -> str:
         payload = request.get_json(silent=True) if request.is_json else {}
@@ -484,6 +487,9 @@ def build_app(client, model: str):
     _rate_counts: dict = {}  # ip → [timestamp, ...]
     _RATE_LIMIT  = int(os.getenv("HANCOCK_RATE_LIMIT", "60"))   # requests/min
     _RATE_WINDOW = 60  # seconds
+    _INTERNAL_DIAGNOSTICS_ENABLED = os.getenv(
+        "HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS", "false"
+    ).strip().lower() in {"1", "true", "yes", "on"}
 
     def _check_auth_and_rate() -> "tuple[bool, str, int]":
         """Returns (ok, error_message, remaining). Empty HANCOCK_API_KEY disables auth."""
@@ -568,6 +574,36 @@ def build_app(client, model: str):
         for m, cnt in snap["by_mode"].items():
             lines.append(f'hancock_requests_by_mode{{mode="{m}"}} {cnt}')
         return Response("\n".join(lines) + "\n", mimetype="text/plain; version=0.0.4")
+
+    @app.route("/internal/diagnostics", methods=["GET"])
+    def internal_diagnostics():
+        """Internal runtime diagnostics (non-secret metadata only)."""
+        if not _INTERNAL_DIAGNOSTICS_ENABLED:
+            _inc("errors_total")
+            return _error_response("Not Found", 404)
+
+        ok, err, _ = _check_auth_and_rate()
+        if not ok:
+            _inc("errors_total")
+            return _error_response(err, 401 if "Unauthorized" in err else 429)
+
+        _inc("requests_total")
+        _inc("requests_by_endpoint", "/internal/diagnostics")
+        uptime_seconds = int(max(0, time.monotonic() - _started_at_monotonic))
+        return jsonify({
+            "backend_mode": os.getenv("HANCOCK_LLM_BACKEND", "ollama").lower(),
+            "current_model": model,
+            "loaded_model_aliases": MODELS,
+            "rate_limit": {
+                "requests_per_minute": _RATE_LIMIT,
+                "window_seconds": _RATE_WINDOW,
+                "auth_enabled": bool(_HANCOCK_API_KEY),
+            },
+            "uptime": {
+                "seconds": uptime_seconds,
+                "started_at_unix": int(_started_at_unix),
+            },
+        })
 
     @app.route("/v1/agents", methods=["GET"])
     def agents_endpoint():

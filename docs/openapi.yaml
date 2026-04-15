@@ -102,13 +102,15 @@ paths:
 
   /internal/diagnostics:
     get:
-      summary: Internal runtime diagnostics (gated)
+      summary: Auth-gated internal runtime diagnostics
+      description: |
+        Returns non-secret runtime metadata for operators when
+        HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS is enabled. The server must also
+        have HANCOCK_API_KEY configured.
       tags: [System]
-      description: >
-        Returns non-secret runtime metadata when HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS=true.
       responses:
         "200":
-          description: Runtime diagnostics payload
+          description: Runtime metadata snapshot
           content:
             application/json:
               schema:
@@ -116,6 +118,7 @@ paths:
                 properties:
                   backend_mode:
                     type: string
+                    example: ollama
                   current_model:
                     type: string
                   model_aliases:
@@ -126,16 +129,28 @@ paths:
                   rate_limit:
                     type: object
                     properties:
-                      requests_per_minute: { type: integer }
-                      window_seconds: { type: integer }
-                      auth_enabled: { type: boolean }
+                      requests_per_minute:
+                        type: integer
+                        example: 60
+                      window_seconds:
+                        type: integer
+                        example: 60
+                      auth_enabled:
+                        type: boolean
+                        example: true
                   uptime:
                     type: object
                     properties:
-                      seconds: { type: number }
-                      started_at_unix: { type: number }
+                      seconds:
+                        type: integer
+                        example: 123
+                      started_at_unix:
+                        type: integer
+                        example: 1710000000
         "401": { description: Unauthorized }
+        "403": { description: Endpoint misconfigured without HANCOCK_API_KEY }
         "404": { description: Endpoint disabled }
+        "429": { description: Rate limit exceeded }
 
   /v1/chat:
     post:

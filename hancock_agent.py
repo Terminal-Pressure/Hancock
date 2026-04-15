@@ -239,7 +239,7 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434") + "/v1"
 DEFAULT_MODEL   = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 CODER_MODEL     = os.getenv("OLLAMA_CODER_MODEL", "qwen2.5-coder:7b")
 VERSION         = "0.5.0"
-PROCESS_STARTED_AT_UNIX = time.time()
+PROCESS_STARTED_AT_UNIX = int(time.time())
 PROCESS_STARTED_AT_MONOTONIC = time.monotonic()
 
 # ── Available models ──────────────────────────────────────────────────────────
@@ -581,7 +581,13 @@ def build_app(client, model: str):
     def internal_diagnostics_endpoint():
         """Auth-gated runtime diagnostics endpoint."""
         if not _ENABLE_INTERNAL_DIAGNOSTICS:
-            return _error_response("Not Found", 404)
+            return _error_response("Not found", 404)
+        if not _HANCOCK_API_KEY:
+            _inc("errors_total")
+            return _error_response(
+                "Internal diagnostics requires HANCOCK_API_KEY authentication to be configured",
+                403,
+            )
 
         ok, err, _ = _check_auth_and_rate()
         if not ok:
@@ -590,12 +596,11 @@ def build_app(client, model: str):
 
         _inc("requests_total")
         _inc("requests_by_endpoint", "/internal/diagnostics")
-
-        uptime_seconds = round(max(0.0, time.monotonic() - PROCESS_STARTED_AT_MONOTONIC), 3)
+        uptime_seconds = max(0, int(time.monotonic() - PROCESS_STARTED_AT_MONOTONIC))
         return jsonify({
             "backend_mode": backend,
             "current_model": model,
-            "model_aliases": MODELS,
+            "model_aliases": dict(MODELS),
             "rate_limit": {
                 "requests_per_minute": _RATE_LIMIT,
                 "window_seconds": _RATE_WINDOW,

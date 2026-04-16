@@ -1,5 +1,5 @@
-CyberViser Proprietary License
-Copyright (c) 2025 CyberViser. All Rights Reserved.
+CyberViser / 0ai-Cyberviser Project License
+Copyright (c) 2025-2026 Johnny Watters ("0ai-Cyberviser"). All Rights Reserved.
 
 IMPORTANT — READ CAREFULLY BEFORE USING THIS SOFTWARE.
 
@@ -10,13 +10,17 @@ Software.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. OWNERSHIP
+1. PROJECT CONTROL
 
-   CyberViser retains sole and exclusive ownership of all intellectual property
-   rights, title, and interest in and to the Software, including all source
-   code, model weights, training data, fine-tuning datasets, documentation,
-   trade secrets, and any derivative works created by CyberViser. No ownership
-   rights are transferred to you under this license.
+   CyberViser is operated by Johnny Watters ("0ai-Cyberviser"). Repository
+   administration, branding direction, release decisions, and commercial
+   licensing decisions for this repository are controlled by Johnny Watters.
+
+   To the extent permitted by applicable law and any contributor agreement that
+   applies to a particular change, Johnny Watters controls the licensing and
+   commercial administration of repository materials. Third-party components,
+   upstream materials, and any non-assigned contributions remain subject to
+   their own governing terms.
 
 2. PERMITTED USES (Non-Commercial Only)
 
@@ -27,8 +31,7 @@ Software.
       purposes only;
    b) Run the Software locally for personal, non-commercial evaluation;
    c) Submit contributions (pull requests, issues, feedback) to this repository,
-      provided you agree that all contributions are irrevocably assigned to
-      CyberViser with full ownership and no compensation owed.
+      subject to the contribution terms in this repository.
 
 3. RESTRICTIONS — YOU MAY NOT:
 
@@ -50,8 +53,8 @@ Software.
       tune, distill, or improve any machine learning model without explicit
       written permission from CyberViser;
 
-   e) WHITE-LABELING — Remove, alter, obscure, or replace any CyberViser or
-      Hancock branding, copyright notices, or attribution in the Software;
+   e) WHITE-LABELING — Remove, alter, obscure, or replace copyright, ownership,
+      or attribution notices in the Software;
 
    f) REVERSE ENGINEERING — Decompile, disassemble, or reverse-engineer any
       compiled or obfuscated components of the Software for any purpose not
@@ -62,45 +65,49 @@ Software.
 
 4. COMMERCIAL LICENSING
 
-   Commercial use, integration, white-label deployment, or enterprise licensing
-   of the Software requires a separate written agreement with CyberViser.
+   Commercial use, integration, white-label deployment, or enterprise
+   licensing of the Software requires a separate written agreement with Johnny
+   Watters ("0ai-Cyberviser").
 
    To inquire about a commercial license:
    Email:   0ai@cyberviserai.com
+   Email:   cyberviser@proton.me
    GitHub:  https://github.com/0ai-Cyberviser
 
 5. CONTRIBUTIONS
 
-   Any contribution intentionally submitted to this repository (e.g., pull
-   requests, patches, documentation) shall be deemed an irrevocable assignment
-   of all intellectual property rights in that contribution to CyberViser, free
-   of charge and without any obligation on CyberViser's part. Contributors
-   represent that they have the right to make such an assignment.
+   New contributions may be accepted only on the basis that the contributor
+   gives Johnny Watters the rights needed to merge, maintain, relicense, and
+   commercialize that contribution for this project. Maintainers may require a
+   separate written assignment, confirmation, or other rights documentation
+   before merge.
 
 6. NO WARRANTY
 
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS
-   FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. CYBERVISER MAKES NO
+   FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. JOHNNY WATTERS
+   ("0AI-CYBERVISER") MAKES NO
    REPRESENTATION THAT THE SOFTWARE IS ERROR-FREE OR WILL MEET YOUR
    REQUIREMENTS.
 
 7. LIMITATION OF LIABILITY
 
-   IN NO EVENT SHALL CYBERVISER BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING BUT NOT LIMITED TO
-   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES, LOSS OF USE, DATA, OR PROFITS,
-   OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT, ARISING IN ANY WAY OUT OF
-   THE USE OF OR INABILITY TO USE THE SOFTWARE, EVEN IF ADVISED OF THE
-   POSSIBILITY OF SUCH DAMAGE.
+   IN NO EVENT SHALL JOHNNY WATTERS ("0AI-CYBERVISER") BE LIABLE FOR ANY
+   DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+   (INCLUDING BUT NOT LIMITED TO PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES,
+   LOSS OF USE, DATA, OR PROFITS, OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+   ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT,
+   ARISING IN ANY WAY OUT OF THE USE OF OR INABILITY TO USE THE SOFTWARE, EVEN
+   IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 8. TERMINATION
 
-   This license is effective until terminated. CyberViser may terminate your
-   rights under this license immediately and without notice if you breach any
-   term herein. Upon termination, you must destroy all copies of the Software
-   in your possession and cease all use immediately.
+   This license is effective until terminated. Johnny Watters
+   ("0ai-Cyberviser") may terminate your rights under this license immediately
+   and without notice if you breach any term herein. Upon termination, you
+   must destroy all copies of the Software in your possession and cease all use
+   immediately.
 
 9. GOVERNING LAW
 
@@ -111,11 +118,11 @@ Software.
 
 10. ENTIRE AGREEMENT
 
-    This license constitutes the entire agreement between you and CyberViser
-    with respect to the Software and supersedes all prior or contemporaneous
-    agreements, representations, or understandings.
+    This license constitutes the entire agreement between you and Johnny
+    Watters ("0ai-Cyberviser") with respect to the Software and supersedes all
+    prior or contemporaneous agreements, representations, or understandings.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-For commercial licensing inquiries: contact@cyberviser.ai
-© 2025 CyberViser. All Rights Reserved.
+For commercial licensing inquiries: 0ai@cyberviserai.com / cyberviser@proton.me
+© 2025-2026 Johnny Watters ("0ai-Cyberviser"). All Rights Reserved.

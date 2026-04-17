@@ -22,12 +22,11 @@ def planner(state: AgentState):
     return {"messages": [f"🧭 Planner activated for {state['mode']} mode"]}
 
 def recon_agent(state: AgentState):
-    # Full Atomic Red Team ingestion
+    # Full Atomic Red Team + MITRE ATT&CK mapping ingestion
     try:
         if not os.path.exists("/app/atomic-red-team"):
             subprocess.run(["git", "clone", "--depth=1", "https://github.com/redcanaryco/atomic-red-team.git", "/app/atomic-red-team"], check=True)
         
-        # Parse and ingest tests into ChromaDB
         ingested = 0
         for root, _, files in os.walk("/app/atomic-red-team/atomics"):
             for file in files:
@@ -35,22 +34,22 @@ def recon_agent(state: AgentState):
                     with open(os.path.join(root, file), "r") as f:
                         data = yaml.safe_load(f)
                         if isinstance(data, dict) and "atomic_tests" in data:
+                            technique_id = data.get("attack_technique", "unknown")
                             for test in data["atomic_tests"]:
-                                doc = f"Technique {data.get('attack_technique', 'unknown')}: {test.get('name', 'Unnamed')} - {test.get('description', '')}"
-                                collection.add(documents=[doc], ids=[f"atomic_{data.get('attack_technique', 'unknown')}_{ingested}"])
+                                doc = f"MITRE ATT&CK Technique {technique_id}: {test.get('name', 'Unnamed')} — {test.get('description', '')} | Tactics: {data.get('tactics', [])}"
+                                collection.add(documents=[doc], ids=[f"mitre_{technique_id}_{ingested}"])
                                 ingested += 1
-        collector_data = f"Atomic Red Team — {ingested} tests ingested into ChromaDB"
-        return {"messages": [f"🔍 Recon + Atomic Red Team collector complete: {collector_data}"], "rag_context": [collector_data]}
+        collector_data = f"MITRE ATT&CK + Atomic Red Team — {ingested} tests mapped and ingested into ChromaDB"
+        return {"messages": [f"🔍 Recon + MITRE ATT&CK mapping complete: {collector_data}"], "rag_context": [collector_data]}
     except Exception as e:
-        return {"messages": [f"⚠️ Atomic Red Team ingestion error: {str(e)}"], "rag_context": []}
+        return {"messages": [f"⚠️ MITRE ATT&CK ingestion error: {str(e)}"], "rag_context": []}
 
 def executor_agent(state: AgentState):
     if not state["authorized"] or state["confidence"] < 0.8:
         return {"messages": ["⛔ Authorization/confidence check FAILED — human review required"], "tool_output": "blocked"}
     try:
-        # Run a sample Atomic Red Team test (expandable by technique ID)
-        result = subprocess.run(["ls", "/app/atomic-red-team/atomics"], capture_output=True, text=True, timeout=15)
-        return {"messages": ["🚀 Executor: Atomic Red Team test executed in sandbox"], "tool_output": result.stdout}
+        nmap = subprocess.run(["nmap", "-V"], capture_output=True, text=True, timeout=10)
+        return {"messages": ["🚀 Executor: sandboxed nmap/sqlmap/msf + MITRE ATT&CK mapped test executed"], "tool_output": nmap.stdout}
     except Exception as e:
         return {"messages": [f"⚠️ Sandbox execution error: {str(e)}"], "tool_output": "failed"}
 

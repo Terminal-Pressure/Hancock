@@ -719,3 +719,5 @@ Thank you to every Bronze Supporter powering the next evolution of Hancock.
 Every contribution directly funds Hybrid RAG, secure sandboxes, fine-tuning, and Phase 4 enterprise features. Thank you!
 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-%23EA4AAA?style=for-the-badge&logo=GitHub-Sponsors&logoColor=white)](https://github.com/sponsors/0ai-Cyberviser)
+
+[![Open Collective](https://img.shields.io/badge/Open%20Collective-7F00FF?style=for-the-badge&logo=opencollective&logoColor=white)](https://opencollective.com/oai-cyberviserai)

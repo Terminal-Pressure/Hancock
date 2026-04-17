@@ -717,3 +717,5 @@ Thank you to every Bronze Supporter powering the next evolution of Hancock.
 - **GitHub Sponsors** → [github.com/sponsors/0ai-Cyberviser](https://github.com/sponsors/0ai-Cyberviser)
 
 Every contribution directly funds Hybrid RAG, secure sandboxes, fine-tuning, and Phase 4 enterprise features. Thank you!
+
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-%23EA4AAA?style=for-the-badge&logo=GitHub-Sponsors&logoColor=white)](https://github.com/sponsors/0ai-Cyberviser)

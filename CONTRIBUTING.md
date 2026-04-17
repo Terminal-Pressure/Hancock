@@ -40,9 +40,9 @@ Open an issue using the [Feature Request template](.github/ISSUE_TEMPLATE/featur
 
 ## Ownership and Contribution Terms
 
-Hancock is maintained by Johnny Watters (`0ai-Cyberviser`) and distributed
-under [Apache-2.0](LICENSE). Repository administration, release decisions, and
-branding control remain with the maintainer.
+This repository is maintained by Johnny Watters (`0ai-Cyberviser`) under the
+project license in [LICENSE](LICENSE). Repository administration, release
+decisions, and branding control remain with the maintainer.
 
 By submitting a pull request, patch, dataset, prompt, documentation update, or
 other contribution for review, you confirm that:

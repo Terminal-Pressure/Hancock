@@ -1,10 +1,37 @@
-# OWNERSHIP.md — Hancock Project
+# Ownership and Control Notice
 
-**Legal Owner and Sole Copyright Holder**  
-Johnny Watters (0ai-Cyberviser / cyberviser) is the **exclusive and sole owner** of the entire Hancock project, all code, documentation, datasets, models, Docker images, fine-tuning artifacts, and all intellectual property contained herein.
+Johnny Watters (`0ai-Cyberviser`) is the primary maintainer, repository
+administrator, and release authority for this repository.
 
-- No other individual, organization, or entity holds any ownership rights.
-- Any future commercial licensing, enterprise Phase 4 features, or third-party contributions require explicit written approval from Johnny Watters only.
-- This file is the canonical source of truth for ownership and is enforced in every GitHub workflow, SECURITY.md, and LICENSE.
+## Administrative control
 
-Last updated: April 17, 2026 by Johnny Watters (0ai-Cyberviser)
+- Name: Johnny Watters
+- GitHub identities: `cyberviser`, `cyberviser-dotcom`, `0ai-Cyberviser`
+- Primary contact: `0ai@cyberviserai.com`
+- Secondary contact: `cyberviser@proton.me`
+
+Repository settings, release decisions, branding direction, and merge approval
+policy are controlled by Johnny Watters (`0ai-Cyberviser`).
+
+## Copyright and licensing
+
+This repository is distributed under the project license in [LICENSE](LICENSE).
+The repository may include work by Johnny Watters and other contributors.
+Unless rights are separately assigned in writing, copyright in each
+contribution remains with its author subject to the repository license and any
+separate contributor agreement that applies to that contribution.
+
+This notice does not override valid third-party, upstream, or open-source
+obligations.
+
+## Branding and attribution
+
+The project identity, repository stewardship, and any branding or naming
+guidance specific to CyberViser / Hancock remain under the control of Johnny
+Watters (`0ai-Cyberviser`) except where a separate notice states otherwise.
+
+## Future contributions
+
+New contributions are reviewed solely at maintainer discretion. Maintainers may
+require a separate written assignment, trademark acknowledgment, or other
+rights confirmation before merging a contribution.

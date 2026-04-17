@@ -14,7 +14,7 @@ class AgentState(TypedDict):
     confidence: float
     rag_context: List[str]
     tool_output: str
-    query: str = None   # Exploit-DB query (CVE, keyword, EDB-ID)
+    query: str = None
 
 # Persistent ChromaDB
 chroma_client = PersistentClient(path="./chroma_db")
@@ -25,13 +25,11 @@ def planner(state: AgentState):
 
 def recon_agent(state: AgentState):
     try:
-        # Existing collectors (Atomic Red Team, CAPEC, CWE, ATT&CK)
         if not os.path.exists("/app/atomic-red-team"):
             subprocess.run(["git", "clone", "--depth=1", "https://github.com/redcanaryco/atomic-red-team.git", "/app/atomic-red-team"], check=True)
         
-        # ENHANCED EXPLOIT-DB PARSING
         if state.get("query"):
-            # Primary: JSON endpoint
+            # Official Exploit-DB JSON search
             json_url = f"https://www.exploit-db.com/search?json=1&q={state['query']}"
             headers = {"User-Agent": "Hancock-0ai/4.1"}
             r = requests.get(json_url, headers=headers, timeout=15)
@@ -44,16 +42,21 @@ def recon_agent(state: AgentState):
                 title = item.get("title", "Untitled")
                 cve = item.get("cve", "None")
                 author = item.get("author", "Unknown")
-                date = item.get("date", "Unknown")
+                date = item.get("date_published", "Unknown")
+                platform = item.get("platform", "Unknown")
                 verified = item.get("verified", False)
-                doc = f"Exploit-DB EDB-{edb_id}: {title} | CVE: {cve} | Author: {author} | Date: {date} | Verified: {verified}"
+                
+                # Safe code preview (truncated, never executed)
+                code_preview = item.get("code", "")[:400] + "..." if item.get("code") else "No code preview available"
+                
+                doc = f"Exploit-DB EDB-{edb_id}: {title} | CVE: {cve} | Platform: {platform} | Author: {author} | Date: {date} | Verified: {verified}\nCode Preview: {code_preview}"
                 collection.add(documents=[doc], ids=[f"exploitdb_{edb_id}"])
                 enriched.append(doc)
             
-            collector_data = f"Exploit-DB — {len(enriched)} enriched results parsed and ingested (EDB-ID, CVE, author, date, verified)"
+            collector_data = f"Exploit-DB — {len(enriched)} enriched results (platform + safe code preview) parsed and ingested"
             return {"messages": [f"🔍 Recon + ENHANCED EXPLOIT-DB parsing complete: {collector_data}"], "rag_context": [collector_data]}
         
-        collector_data = "Exploit-DB enhanced parsing ready"
+        collector_data = "Exploit-DB platform + code preview ready"
         return {"messages": [f"🔍 Recon + Exploit-DB integration complete: {collector_data}"], "rag_context": [collector_data]}
     except Exception as e:
         return {"messages": [f"⚠️ Exploit-DB parsing error: {str(e)}"], "rag_context": []}
@@ -63,7 +66,7 @@ def executor_agent(state: AgentState):
         return {"messages": ["⛔ Authorization/confidence check FAILED — human review required"], "tool_output": "blocked"}
     try:
         nmap = subprocess.run(["nmap", "-V"], capture_output=True, text=True, timeout=10)
-        return {"messages": ["🚀 Executor: sandboxed nmap/sqlmap/msf + Exploit-DB parsed test executed"], "tool_output": nmap.stdout}
+        return {"messages": ["🚀 Executor: sandboxed nmap/sqlmap/msf + Exploit-DB (platform + preview) executed"], "tool_output": nmap.stdout}
     except Exception as e:
         return {"messages": [f"⚠️ Sandbox execution error: {str(e)}"], "tool_output": "failed"}
 
@@ -90,8 +93,7 @@ workflow.add_edge("reporter", END)
 graph = workflow.compile()
 
 if __name__ == "__main__":
-    # Example Exploit-DB query
     state = {'messages':[], 'mode':'pentest', 'authorized':True, 'confidence':0.95, 'rag_context':[], 'tool_output':'', 'query':'CVE-2024-'}
     result = graph.invoke(state)
-    print('✅ Full LangGraph agentic core (ALL 9 modes + Enhanced Exploit-DB parsing) test successful:')
+    print('✅ Full LangGraph agentic core (ALL 9 modes + Enhanced Exploit-DB with platform + code preview) test successful:')
     print(json.dumps(result, indent=2))

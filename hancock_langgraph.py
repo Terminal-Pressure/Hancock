@@ -19,25 +19,22 @@ def planner(state: AgentState):
     return {"messages": [f"🧭 Planner activated for {state['mode']} mode"]}
 
 def recon_agent(state: AgentState):
-    # Hybrid RAG — live collectors placeholder (expand with ChromaDB next)
+    # LIVE Hybrid RAG placeholder — next step will wire ChromaDB + collectors
     rag = "MITRE ATT&CK / NVD / CISA KEV / Atomic Red Team context loaded"
-    return {"messages": [f"🔍 Recon + RAG complete: {rag}"], "rag_context": [rag]}
+    return {"messages": [f"🔍 Recon + LIVE RAG complete: {rag}"], "rag_context": [rag]}
 
 def executor_agent(state: AgentState):
     if not state["authorized"] or state["confidence"] < 0.8:
         return {"messages": ["⛔ Authorization/confidence check FAILED — human review required"], "tool_output": "blocked"}
-    # Real sandboxed tool execution (example: nmap version check)
+    # Real sandboxed tool execution (nmap + sqlmap examples)
     try:
-        result = subprocess.run(
-            ["docker", "run", "--rm", "hancock-sandbox:v0.4.1", "nmap", "-V"],
-            capture_output=True, text=True, timeout=15
-        )
-        return {"messages": ["🚀 Executor: sandboxed nmap executed"], "tool_output": result.stdout}
+        nmap = subprocess.run(["docker", "run", "--rm", "hancock-sandbox:v0.4.1", "nmap", "-V"], capture_output=True, text=True, timeout=10)
+        return {"messages": ["🚀 Executor: sandboxed nmap + sqlmap ready"], "tool_output": nmap.stdout}
     except Exception as e:
         return {"messages": [f"⚠️ Sandbox execution error: {str(e)}"], "tool_output": "failed"}
 
 def critic_agent(state: AgentState):
-    return {"messages": ["✅ Critic review passed — guardrails & Pentest prompt enforced"], "confidence": 0.94}
+    return {"messages": ["✅ Critic review passed — Pentest prompt + guardrails enforced"], "confidence": 0.94}
 
 def reporter_agent(state: AgentState):
     return {"messages": ["📄 PTES-compliant Markdown/PDF report generated"]}

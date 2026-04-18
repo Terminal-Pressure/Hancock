@@ -5,36 +5,49 @@ Run:  make test   or   .venv/bin/pytest tests/ -v
 import json
 import os
 import sys
+import time
 import pytest
 
 # Ensure project root is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+def _build_mocked_app(env=None, unset=(), response_text="Mocked Hancock response."):
+    """Create a Flask app with a mocked OpenAI client and optional env overrides."""
+    from unittest.mock import MagicMock, patch
+    import importlib
+
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.choices[0].message.content = response_text
+    mock_client.chat.completions.create.return_value = mock_resp
+
+    with patch.dict(os.environ, env or {}, clear=False):
+        for key in unset:
+            os.environ.pop(key, None)
+        with patch("hancock_agent.OpenAI", return_value=mock_client):
+            import hancock_agent
+
+            importlib.reload(hancock_agent)
+            app = hancock_agent.build_app(
+                mock_client, "mistralai/mistral-7b-instruct-v0.3"
+            )
+            app.testing = True
+            return app
+
+
+def _metric_counter_value(metrics_text: str, metric_name: str) -> int:
+    for line in metrics_text.splitlines():
+        if line.startswith(f"{metric_name} "):
+            return int(float(line.split()[-1]))
+    raise AssertionError(f"Metric '{metric_name}' not found")
+
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture
 def app():
     """Create a Flask test app with a mocked OpenAI client."""
-    from unittest.mock import MagicMock, patch
-
-    mock_client = MagicMock()
-    mock_resp = MagicMock()
-    mock_resp.choices[0].message.content = "Mocked Hancock response."
-    mock_client.chat.completions.create.return_value = mock_resp
-
-    # Patch OpenAI before importing run_server
-    with patch("hancock_agent.OpenAI", return_value=mock_client):
-        import hancock_agent
-        flask_app = hancock_agent.run_server.__wrapped__ if hasattr(
-            hancock_agent.run_server, "__wrapped__") else None
-
-        # Build app directly since run_server calls app.run()
-        from flask import Flask
-        import importlib
-        # Re-import to get the Flask app instance via the factory
-        app = hancock_agent.build_app(mock_client, "mistralai/mistral-7b-instruct-v0.3")
-        app.testing = True
-        return app
+    return _build_mocked_app()
 
 
 @pytest.fixture
@@ -260,6 +273,32 @@ class TestWebhook:
                         content_type="application/json")
         assert r.status_code == 400
 
+    def test_webhook_empty_model_response_returns_502(self):
+        """When the LLM returns an empty response, webhook returns 502."""
+        from unittest.mock import MagicMock, patch
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.choices[0].message.content = ""
+        mock_client.chat.completions.create.return_value = mock_resp
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("HANCOCK_WEBHOOK_SECRET", None)
+            with patch("hancock_agent.OpenAI", return_value=mock_client):
+                import hancock_agent
+                app = hancock_agent.build_app(
+                    mock_client, "mistralai/mistral-7b-instruct-v0.3"
+                )
+                app.testing = True
+                c = app.test_client()
+                r = c.post("/v1/webhook",
+                           data=json.dumps({
+                               "source": "splunk",
+                               "alert": "Suspicious activity detected",
+                               "severity": "high",
+                           }),
+                           content_type="application/json")
+                assert r.status_code == 502
+                assert "empty" in r.get_json()["error"]
+
 
 # ── Auth (HANCOCK_API_KEY) ────────────────────────────────────────────────────
 
@@ -474,6 +513,102 @@ class TestMetrics:
         assert b'/v1/ask' in r.data
 
 
+# ── /internal/diagnostics ─────────────────────────────────────────────────────
+
+class TestInternalDiagnostics:
+    @pytest.fixture
+    def diagnostics_app(self):
+        return _build_mocked_app(
+            env={
+                "HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS": "true",
+                "HANCOCK_API_KEY": "diag-secret-token",
+                "HANCOCK_RATE_LIMIT": "7",
+                "HANCOCK_LLM_BACKEND": "ollama",
+                "OPENAI_API_KEY": "sk-live-secret",
+                "NVIDIA_API_KEY": "nvapi-secret",
+                "HANCOCK_WEBHOOK_SECRET": "webhook-secret",
+            }
+        )
+
+    @pytest.fixture
+    def diagnostics_without_auth_app(self):
+        return _build_mocked_app(
+            env={
+                "HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS": "true",
+                "HANCOCK_RATE_LIMIT": "7",
+                "HANCOCK_LLM_BACKEND": "ollama",
+            },
+            unset=("HANCOCK_API_KEY",),
+        )
+
+    def test_diagnostics_disabled_returns_404(self):
+        app = _build_mocked_app(
+            unset=("HANCOCK_ENABLE_INTERNAL_DIAGNOSTICS", "HANCOCK_API_KEY")
+        )
+        c = app.test_client()
+        r = c.get("/internal/diagnostics")
+        assert r.status_code == 404
+
+    def test_diagnostics_requires_server_auth_configuration(self, diagnostics_without_auth_app):
+        c = diagnostics_without_auth_app.test_client()
+        r = c.get("/internal/diagnostics")
+        assert r.status_code == 403
+        assert "HANCOCK_API_KEY" in r.get_json()["error"]
+
+    def test_diagnostics_requires_auth_when_enabled(self, diagnostics_app):
+        c = diagnostics_app.test_client()
+        r = c.get("/internal/diagnostics")
+        assert r.status_code == 401
+        assert "error" in r.get_json()
+
+    def test_diagnostics_returns_runtime_metadata_only(self, diagnostics_app):
+        c = diagnostics_app.test_client()
+        before_metrics = c.get("/metrics").get_data(as_text=True)
+
+        r = c.get(
+            "/internal/diagnostics",
+            headers={"Authorization": "Bearer diag-secret-token"},
+        )
+        assert r.status_code == 200
+        payload = r.get_json()
+        body = r.get_data(as_text=True)
+
+        assert payload["backend_mode"] == "ollama"
+        assert payload["current_model"] == "mistralai/mistral-7b-instruct-v0.3"
+        assert "model_aliases" in payload
+        assert (
+            payload["model_aliases"]["nim-mistral"]
+            == "mistralai/mistral-7b-instruct-v0.3"
+        )
+        assert "loaded_model_aliases" not in payload
+        assert payload["rate_limit"]["requests_per_minute"] == 7
+        assert payload["rate_limit"]["window_seconds"] == 60
+        assert payload["rate_limit"]["auth_enabled"] is True
+        assert payload["uptime"]["seconds"] >= 0
+        assert payload["uptime"]["started_at_unix"] <= int(time.time())
+
+        after_metrics = c.get("/metrics").get_data(as_text=True)
+        assert (
+            _metric_counter_value(after_metrics, "hancock_requests_total")
+            == _metric_counter_value(before_metrics, "hancock_requests_total") + 1
+        )
+        assert (
+            'hancock_requests_by_endpoint{endpoint="/internal/diagnostics"} 1'
+            in after_metrics
+        )
+
+        for secret in (
+            "diag-secret-token",
+            "sk-live-secret",
+            "nvapi-secret",
+            "webhook-secret",
+            "HANCOCK_API_KEY",
+            "OPENAI_API_KEY",
+            "NVIDIA_API_KEY",
+        ):
+            assert secret not in body
+
+
 # ── /v1/sigma ─────────────────────────────────────────────────────────────────
 
 class TestSigma:
@@ -498,7 +633,9 @@ class TestSigma:
                         }),
                         content_type="application/json")
         assert r.status_code == 200
-        assert d["technique"] == "T1558.003" if (d := r.get_json()) else True
+        d = r.get_json()
+        if d:
+            assert d["technique"] == "T1558.003"
 
     def test_sigma_ttp_alias(self, client):
         """Accepts 'ttp' field as alias for 'description'."""
@@ -659,3 +796,10 @@ class TestIoc:
         assert r.status_code == 200
         d = r.get_json()
         assert d["type"] == "md5"
+
+    def test_ioc_auto_detects_type(self, client):
+        r = client.post("/v1/ioc",
+                     data=json.dumps({"indicator": "185.220.101.35"}),
+                     content_type="application/json")
+        assert r.status_code == 200
+        assert r.get_json()["type"] == "ipv4"

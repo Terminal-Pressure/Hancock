@@ -28,36 +28,10 @@ OPENAI_IMPORT_ERROR_MSG = (
     "Install it with 'pip install openai' and ensure NVIDIA_API_KEY is set."
 )
 
-def require_openai(client_cls: Optional[object] = None) -> None:
-    """
-    Ensure that the optional 'openai' dependency is available.
-
-    This defers the ImportError until runtime (e.g., in the constructor) and
-    provides a clear error message when the dependency is missing.
-
-    The optional client_cls argument is accepted for compatibility with call
-    sites that invoke require_openai(OpenAI); if not provided, the module-level
-    OpenAI symbol is used.
-    """
-    client = client_cls if client_cls is not None else OpenAI  # type: ignore[name-defined]
-    if client is None:
-        raise ImportError(OPENAI_IMPORT_ERROR_MSG)
-
 try:
     from openai import OpenAI
 except ImportError:  # allow import; require_openai() enforces dependency in constructor
     OpenAI = None  # type: ignore
-
-try:
-    from openai import OpenAI
-except ImportError:  # allow import; require_openai() enforces dependency in constructor
-    OpenAI = None  # type: ignore
-
-
-OPENAI_IMPORT_ERROR_MSG = (
-    "The 'openai' package is required to use HancockClient but is not installed. "
-    "Install it with: pip install openai"
-)
 
 
 def require_openai():
@@ -120,6 +94,25 @@ IOC_SYSTEM = (
     "enrichment report: indicator type, threat intel context, associated MITRE ATT&CK techniques, "
     "risk score 1-10 with justification, recommended defensive actions, and relevant CVEs/GHSA."
 )
+
+OSINT_SYSTEM = (
+    "You are Hancock OSINT, CyberViser's intelligence analyst. "
+    "Focus on open-source intelligence collection and analysis using publicly available data. "
+    "Correlate domains, IPs, WHOIS, passive DNS, certificates, and infrastructure overlaps. "
+    "Provide structured findings, confidence levels, and practical next investigative steps."
+)
+
+CHAT_MODE_TO_SYSTEM: dict[str, str] = {
+    "auto": SECURITY_SYSTEM,
+    "pentest": SECURITY_SYSTEM + " Focus on offensive security and penetration testing.",
+    "soc": SECURITY_SYSTEM + " Focus on SOC operations, alert triage, and incident response.",
+    "code": CODE_SYSTEM,
+    "ciso": CISO_SYSTEM,
+    "sigma": SIGMA_SYSTEM,
+    "yara": YARA_SYSTEM,
+    "ioc": IOC_SYSTEM,
+    "osint": OSINT_SYSTEM,
+}
 
 
 class HancockClient:
@@ -280,8 +273,23 @@ class HancockClient:
                               temperature=0.3, top_p=0.9, max_tokens=1000)
 
     def chat(self, message: str, history: Optional[list] = None, mode: str = "auto") -> str:
-        """Multi-turn conversation with history."""
-        system = SECURITY_SYSTEM
+        """
+        Multi-turn conversation with history.
+
+        The ``mode`` argument selects the system prompt used for the conversation:
+        ``auto``, ``pentest``, ``soc``, ``code``, ``ciso``, ``sigma``, ``yara``,
+        ``ioc``, and ``osint``.
+
+        Unknown mode values raise a ``ValueError``.
+        """
+        normalized_mode = (mode or "auto").strip().lower()
+        if normalized_mode not in CHAT_MODE_TO_SYSTEM:
+            supported_modes = ", ".join(sorted(CHAT_MODE_TO_SYSTEM.keys()))
+            raise ValueError(
+                f"Unsupported mode '{mode}' passed to chat(). "
+                f"Supported modes: {supported_modes}."
+            )
+        system = CHAT_MODE_TO_SYSTEM[normalized_mode]
         messages = [{"role": "system", "content": system}]
         if history:
             messages.extend(history)

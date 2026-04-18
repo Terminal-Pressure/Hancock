@@ -18,7 +18,7 @@ FROM python:3.11-slim AS runtime
 LABEL maintainer="CyberViser <contact@cyberviser.ai>"
 LABEL description="Hancock — AI-powered cybersecurity agent by CyberViser"
 LABEL org.opencontainers.image.source="https://github.com/0ai-Cyberviser/Hancock"
-LABEL org.opencontainers.image.version="0.5.0"
+LABEL org.opencontainers.image.version="0.6.0"
 
 WORKDIR /app
 
@@ -28,6 +28,8 @@ COPY --from=builder /install /usr/local
 # Copy application source (ordered by change frequency — stable layers first)
 COPY hancock_constants.py .
 COPY hancock_agent.py .
+COPY input_validator.py .
+COPY orchestration_controller.py .
 COPY collectors/ collectors/
 COPY formatter/ formatter/
 COPY monitoring/ monitoring/

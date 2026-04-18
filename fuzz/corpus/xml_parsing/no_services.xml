@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nmaprun scanner="nmap">
+  <host>
+    <address addr="172.16.0.1" addrtype="ipv4"/>
+    <hostnames/>
+    <ports>
+      <port portid="8080" protocol="tcp"/>
+    </ports>
+  </host>
+</nmaprun>

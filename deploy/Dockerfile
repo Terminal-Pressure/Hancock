@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
 
-LABEL maintainer="CyberViser <contact@cyberviser.ai>"
-LABEL description="Hancock — AI-powered cybersecurity agent by CyberViser (multi-stage)"
+LABEL maintainer="Johnny Watters <0ai@cyberviserai.com>"
+LABEL description="Hancock — AI-powered cybersecurity agent maintained by Johnny Watters (0ai-Cyberviser) (multi-stage)"
 
 WORKDIR /app
 
@@ -24,6 +24,8 @@ COPY --from=builder /install /usr/local
 # Copy application source
 COPY hancock_agent.py .
 COPY hancock_constants.py .
+COPY input_validator.py .
+COPY orchestration_controller.py .
 COPY collectors/ collectors/
 COPY formatter/ formatter/
 

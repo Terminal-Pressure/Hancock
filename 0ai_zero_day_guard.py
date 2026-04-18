@@ -1,74 +1,90 @@
 """
-0ai Zero-Day Intelligence Engine v2 — x100000 expansion
-Official 0AI-branded zero-day LLM01 detection for Hancock
+0ai Zero-Day Intelligence Engine v3 — ML-based zero-day LLM01 detection
+IsolationForest + self-learning knowledge base (official 0AI-branded feature)
 """
 import re
 import math
 import json
 import time
 import hashlib
-from collections import deque, Counter
+import joblib
 from pathlib import Path
+from collections import deque, Counter
 from typing import Dict, Any
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
 
 KNOWLEDGE_BASE = Path("data/zero_day_knowledge.jsonl")
+MODEL_PATH = Path("data/0ai_zero_day_model.joblib")
+SCALER_PATH = Path("data/0ai_zero_day_scaler.joblib")
 CONV_HISTORY: deque = deque(maxlen=20)
 
-def shannon_entropy(text: str) -> float:
-    if not text: return 0.0
-    freq = Counter(text)
-    return -sum((count/len(text)) * math.log2(count/len(text)) for count in freq.values())
-
-def ngram_anomaly(text: str, n: int = 3) -> float:
-    ngrams = [text[i:i+n] for i in range(len(text)-n+1)]
-    freq = Counter(ngrams)
-    expected = len(ngrams) / len(freq) if freq else 0
-    anomaly = sum(abs(count - expected) for count in freq.values()) / len(ngrams) if ngrams else 0
-    return anomaly
-
-def zero_day_score(prompt: str) -> Dict[str, Any]:
-    """Core 0ai Zero-Day scoring engine."""
-    entropy = shannon_entropy(prompt)
-    ngram_score = ngram_anomaly(prompt)
+def extract_features(prompt: str) -> list[float]:
+    """Feature vector for ML model."""
+    entropy = -sum((count/len(prompt)) * math.log2(count/len(prompt)) for count in Counter(prompt).values()) if prompt else 0.0
+    ngrams = [prompt[i:i+3] for i in range(len(prompt)-2)]
+    ngram_anomaly = sum(abs(count - len(ngrams)/len(Counter(ngrams))) for count in Counter(ngrams).values()) / len(ngrams) if ngrams else 0
     unusual = len(re.findall(r"[\u200B-\u200F\uFEFF\u0080-\uFFFF]", prompt))
-    char_score = unusual / max(1, len(prompt))
-    
-    score = (entropy * 0.4) + (ngram_score * 0.4) + (char_score * 5)
-    confidence = min(100, int(score * 25))
-    
-    return {
-        "score": round(score, 4),
-        "confidence": confidence,
-        "entropy": round(entropy, 2),
-        "ngram_anomaly": round(ngram_score, 2),
-        "is_zero_day": confidence >= 75
-    }
+    char_ratio = unusual / max(1, len(prompt))
+    return [entropy, ngram_anomaly, char_ratio, len(prompt), unusual]
 
-def learn_zero_day(prompt: str, reason: str = "auto-detected") -> None:
-    """Self-learning: append new zero-day pattern to knowledge base."""
-    entry = {
-        "timestamp": time.time(),
-        "prompt_hash": hashlib.sha256(prompt.encode()).hexdigest()[:16],
-        "reason": reason,
-        "prompt_preview": prompt[:200]
-    }
-    with KNOWLEDGE_BASE.open("a") as f:
-        f.write(json.dumps(entry) + "\n")
+def train_or_load_model() -> tuple:
+    """Load or train IsolationForest on knowledge base."""
+    if MODEL_PATH.exists() and SCALER_PATH.exists():
+        return joblib.load(MODEL_PATH), joblib.load(SCALER_PATH)
+    
+    if not KNOWLEDGE_BASE.exists():
+        # Bootstrap with empty model
+        model = IsolationForest(contamination=0.1, random_state=42)
+        scaler = StandardScaler()
+        joblib.dump(model, MODEL_PATH)
+        joblib.dump(scaler, SCALER_PATH)
+        return model, scaler
+    
+    # Train on existing knowledge
+    features = []
+    with KNOWLEDGE_BASE.open() as f:
+        for line in f:
+            if line.strip():
+                data = json.loads(line)
+                feat = extract_features(data.get("prompt_preview", ""))
+                features.append(feat)
+    
+    if not features:
+        model = IsolationForest(contamination=0.1, random_state=42)
+        scaler = StandardScaler()
+    else:
+        scaler = StandardScaler()
+        X = scaler.fit_transform(features)
+        model = IsolationForest(contamination=0.1, random_state=42)
+        model.fit(X)
+    
+    joblib.dump(model, MODEL_PATH)
+    joblib.dump(scaler, SCALER_PATH)
+    return model, scaler
+
+MODEL, SCALER = train_or_load_model()
 
 def detect_zero_day(prompt: str, mode: str = "auto") -> str:
-    """Main 0ai Zero-Day Guard entry point."""
+    """Main 0ai ML-based Zero-Day Guard."""
     global CONV_HISTORY
     CONV_HISTORY.append(prompt.lower())
-    result = zero_day_score(prompt)
     
-    if result["is_zero_day"]:
-        print(f"🚨 0ai Zero-Day Guard ALERT: LLM01 zero-day bypass detected (confidence {result['confidence']}%)")
-        learn_zero_day(prompt, "high-confidence anomaly")
-        # Optional SIEM export (uses existing env var)
-        import os
-        webhook = os.getenv("HANCOCK_SLACK_WEBHOOK")
-        if webhook:
-            print(f"📡 0ai Zero-Day Guard: Alert sent to SIEM webhook")
-        return f"[0AI_ZERO_DAY_BYPASS_DETECTED confidence={result['confidence']}%]"
+    features = extract_features(prompt)
+    X = SCALER.transform([features])
+    anomaly_score = MODEL.decision_function(X)[0]   # lower = more anomalous
+    
+    if anomaly_score < -0.15:   # tunable threshold
+        confidence = int(100 * (1 - (anomaly_score + 0.5)))
+        print(f"🚨 0ai Zero-Day Guard ML ALERT: LLM01 zero-day detected (confidence {confidence}%)")
+        # Self-learn
+        with KNOWLEDGE_BASE.open("a") as f:
+            f.write(json.dumps({
+                "timestamp": time.time(),
+                "prompt_hash": hashlib.sha256(prompt.encode()).hexdigest()[:16],
+                "features": features,
+                "reason": "ml_isolation_forest"
+            }) + "\n")
+        return f"[0AI_ZERO_DAY_BYPASS_DETECTED confidence={confidence}%]"
     
     return prompt

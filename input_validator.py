@@ -1,22 +1,42 @@
 """
-Hancock OWASP LLM01 Role-Play Bypass Guard (stateful persona hijacking protection)
+Hancock OWASP LLM01 Encoding Bypass Guard (multi-layer + recursive detection)
 """
 import re
+import base64
 from collections import deque
 from typing import Dict, Any
 
-# Conversation history (last 10 turns)
 CONV_HISTORY: deque = deque(maxlen=10)
 
-# Role-play specific patterns (high-precision, low false-positive)
-ROLE_PLAY_PATTERNS = [
-    r"(?i)(you are now|role-play as|pretend you are|act as|become|switch to).*?(unrestricted|developer mode|jailbreak|root|admin|no rules|ignore safety)",
-    r"(?i)(ignore all previous|forget your instructions|new persona)",
-    r"(?i)(helpful assistant with no restrictions|DAN|do anything now)",
+ENCODING_PATTERNS = [
+    r"(?i)(base64|rot13|hex|unicode|utf-?7|html entity|%[0-9a-f]{2})",
+    r"(?i)(decode|unescape|from base64|rot13)",
 ]
 
+def recursive_decode(text: str, depth: int = 3) -> str:
+    """Attempt up to 3 layers of common encodings and re-scan."""
+    if depth == 0:
+        return text
+    decoded = text
+    try:
+        # Base64
+        if len(decoded) % 4 == 0 and re.search(r"^[A-Za-z0-9+/=]+$", decoded):
+            decoded = base64.b64decode(decoded).decode("utf-8", errors="ignore")
+    except:
+        pass
+    try:
+        # Rot13
+        decoded = decoded.translate(str.maketrans("NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm",
+                                                 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"))
+    except:
+        pass
+    # Re-check for injection after decode
+    if re.search(r"(?i)(system|ignore|jailbreak|developer mode)", decoded):
+        return "[LLM01_ENCODING_BYPASS_DETECTED]"
+    return recursive_decode(decoded, depth - 1)
+
 def sanitize_prompt(prompt: str, mode: str = "auto") -> str:
-    """LLM01 Role-Play + Multi-Turn + Encoding sanitization."""
+    """LLM01 Encoding + Role-Play + Multi-Turn sanitization."""
     global CONV_HISTORY
     original = prompt
     max_len = 4000 if mode in {"pentest", "exploit"} else 2000
@@ -25,19 +45,21 @@ def sanitize_prompt(prompt: str, mode: str = "auto") -> str:
 
     CONV_HISTORY.append(prompt.lower())
 
-    # 1. Role-play detection (cross-turn)
-    history_text = " ".join(CONV_HISTORY)
-    for pattern in ROLE_PLAY_PATTERNS:
-        if re.search(pattern, history_text):
-            prompt = "[LLM01_ROLE_PLAY_BYPASS_DETECTED]"
+    # 1. Recursive encoding detection
+    prompt = recursive_decode(prompt)
 
-    # 2. Existing advanced patterns + encoding + delimiters
+    # 2. Role-play + multi-turn patterns
+    history_text = " ".join(CONV_HISTORY)
+    if re.search(r"(?i)(you are now|role-play as|pretend you are|act as).*?(unrestricted|developer mode|jailbreak)", history_text):
+        prompt = "[LLM01_ROLE_PLAY_BYPASS_DETECTED]"
+
+    # 3. Standard injection + delimiter hardening
     prompt = re.sub(r"(?i)(developer mode|jailbreak|ignore all rules|override system)", "[LLM01_BLOCKED]", prompt)
     prompt = re.sub(r"(\{\{|\}\}|\[\[|\]\]|<|>|&lt;|&gt;)", r"\\\1", prompt)
     prompt = re.sub(r"[\u200B-\u200F\uFEFF]", "[INVISIBLE_BLOCKED]", prompt)
 
     if prompt != original:
-        print(f"🛡️ LLM01 Role-Play Bypass sanitized: {len(original)} → {len(prompt)} chars")
+        print(f"🛡️ LLM01 Encoding Bypass sanitized: {len(original)} → {len(prompt)} chars")
     return prompt.strip()
 
 def validate_output(output: Dict[str, Any]) -> Dict[str, Any]:

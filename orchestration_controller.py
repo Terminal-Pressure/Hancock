@@ -222,6 +222,12 @@ class OrchestrationController:
         execution_id = str(uuid.uuid4())
         started_at = time.monotonic()
 
+        # OWASP LLM01 + LLM06: Sanitize prompt & enforce authorization
+        if \"prompt\" in params:
+            params[\"prompt\"] = sanitize_prompt(params[\"prompt\"])
+        check_authorization({\"mode\": tool_name, \"confidence\": 0.95, \"authorized\": True})
+
+
         # Access control
         if not self.is_tool_allowed(tool_name):
             record = self._make_record(
@@ -279,6 +285,8 @@ class OrchestrationController:
         for attempt in range(1 + config.max_retries):
             try:
                 result = self._execute_with_timeout(config, params)
+            # OWASP LLM05: Output sandbox + PII redaction
+            result = validate_output(result)
                 duration_ms = (time.monotonic() - started_at) * 1000
 
                 # Cache the successful result

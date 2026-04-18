@@ -670,14 +670,15 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 ## 📄 License
 
-**Apache-2.0** — see [LICENSE](LICENSE) for the repository license and
-[OWNERSHIP.md](OWNERSHIP.md) for the maintainer-control notice.
+**CyberViser / 0ai-Cyberviser Project License** — see [LICENSE](LICENSE) for
+repository terms and [OWNERSHIP.md](OWNERSHIP.md) for the control notice.
 
-- ✅ Use, modify, and redistribute the code under Apache-2.0
+- ✅ View and study the code
+- ✅ Run locally for personal or internal non-commercial evaluation
 - ✅ Submit contributions for maintainer review
-- ✅ Retain your own copyright in your contribution unless separately assigned
-- ❗ Preserve required notices and license text when redistributing
+- ❗ Commercial or production use requires a separate written agreement
 - ❗ Branding, repository administration, and merge approval remain controlled by Johnny Watters / `0ai-Cyberviser`
+- ❗ Third-party materials and non-assigned contributions remain governed by their own terms
 - ❗ Maintainers may require additional written rights confirmation before merging a contribution
 
 **Project contacts:** `0ai@cyberviserai.com` · `cyberviser@proton.me`

@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 LABEL maintainer="Johnny Watters <0ai@cyberviserai.com>"
-LABEL description="Hancock — AI-powered cybersecurity agent maintained by Johnny Watters (0ai-Cyberviser)"
+LABEL description="Hancock — AI-powered cybersecurity agent maintained and licensed by Johnny Watters (0ai-Cyberviser)"
 
 WORKDIR /app
 

@@ -51,7 +51,8 @@ def run_ghsa(data_dir: Path = DATA_DIR) -> None:
     run_collector("ghsa", data_dir)
 
 
-def run_formatter_v3() -> None:
+def run_formatter_v3()
+generate_manifest() -> None:
     """Format all v3 data sources into hancock_v3.jsonl."""
     run_collector("formatter-v3")
 
@@ -193,6 +194,8 @@ def main() -> None:
 
     print("[pipeline] Done.")
 
+
+from data_integrity import generate_manifest
 
 if __name__ == "__main__":
     sys.exit(main())

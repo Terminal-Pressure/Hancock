@@ -201,6 +201,11 @@ class OrchestrationController:
     # ── Execution ─────────────────────────────────────────────────────────────
 
     def execute(self, tool_name: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+
+        # LLM04: Verify dataset integrity before any RAG or fine-tune load
+        if \"dataset\" in params:
+            verify_dataset(params[\"dataset\"])
+
         """Execute a registered tool with retry, caching, and audit logging.
 
         Parameters

@@ -65,7 +65,7 @@ def train_or_load_model() -> tuple:
 
 MODEL, SCALER = train_or_load_model()
 
-def detect_zero_day(prompt: str, mode: str = "auto") -> str:
+def detect_zero_day_ensemble(prompt: str, mode: str = "auto") -> str:
     """Main 0ai ML-based Zero-Day Guard."""
     global CONV_HISTORY
     CONV_HISTORY.append(prompt.lower())
@@ -84,6 +84,60 @@ def detect_zero_day(prompt: str, mode: str = "auto") -> str:
                 "prompt_hash": hashlib.sha256(prompt.encode()).hexdigest()[:16],
                 "features": features,
                 "reason": "ml_isolation_forest"
+            }) + "\n")
+        return f"[0AI_ZERO_DAY_BYPASS_DETECTED confidence={confidence}%]"
+    
+    return prompt
+
+# ── Additional unsupervised algorithm: Local Outlier Factor (LOF) ─────────────
+from sklearn.neighbors import LocalOutlierFactor
+
+def train_lof_model() -> LocalOutlierFactor:
+    """Train LOF on the same knowledge base used by IsolationForest."""
+    if not KNOWLEDGE_BASE.exists():
+        return LocalOutlierFactor(n_neighbors=10, contamination=0.1)
+    
+    features = []
+    with KNOWLEDGE_BASE.open() as f:
+        for line in f:
+            if line.strip():
+                data = json.loads(line)
+                feat = extract_features(data.get("prompt_preview", ""))
+                features.append(feat)
+    
+    if len(features) < 10:
+        return LocalOutlierFactor(n_neighbors=10, contamination=0.1)
+    
+    lof = LocalOutlierFactor(n_neighbors=10, contamination=0.1)
+    lof.fit(features)
+    return lof
+
+LOF_MODEL = train_lof_model()
+
+def detect_zero_day_ensemble_ensemble(prompt: str, mode: str = "auto") -> str:
+    """Ensemble: IsolationForest + LOF for maximum zero-day coverage."""
+    global CONV_HISTORY
+    CONV_HISTORY.append(prompt.lower())
+    
+    features = extract_features(prompt)
+    X = SCALER.transform([features])
+    
+    # IsolationForest score
+    if_score = MODEL.decision_function(X)[0]
+    # LOF score (negative = outlier)
+    lof_score = LOF_MODEL._decision_function(X)[0]
+    
+    # Combined confidence
+    confidence = int(100 * (1 - (if_score + lof_score + 1) / 2))
+    
+    if confidence >= 70:
+        print(f"🚨 0ai Zero-Day Guard ENSEMBLE ALERT: LLM01 zero-day detected (confidence {confidence}%)")
+        with KNOWLEDGE_BASE.open("a") as f:
+            f.write(json.dumps({
+                "timestamp": time.time(),
+                "prompt_hash": hashlib.sha256(prompt.encode()).hexdigest()[:16],
+                "features": features,
+                "reason": "ensemble_if_lof"
             }) + "\n")
         return f"[0AI_ZERO_DAY_BYPASS_DETECTED confidence={confidence}%]"
     

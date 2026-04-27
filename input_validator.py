@@ -377,11 +377,18 @@ def validate_file_path(path: str, allowed_extensions: List[str] = None, must_exi
             except ValueError:
                 return f"path must be within {allowed_dir}"
         
-        # Check for absolute paths if no allowed_dir specified
-        if not allowed_dir and resolved_path.is_absolute() and not str(path).startswith('.'):
-            # Allow absolute paths only if explicitly starting with /
-            if not str(path).startswith('/') and not (len(str(path)) > 1 and str(path)[1] == ':'):
-                return "absolute paths not allowed"
+        # If no allowed_dir specified, apply general restrictions:
+        # - Relative paths starting with . are OK
+        # - Relative paths without . prefix are OK
+        # - Absolute paths are NOT OK (security risk)
+        # This prevents users from accessing arbitrary system files
+        if not allowed_dir:
+            # Check if the resolved path is absolute AND the original didn't start with .
+            # This catches both Unix absolute paths (/path) and Windows (C:\path)
+            if resolved_path.is_absolute():
+                # Allow if user explicitly used ./ prefix (relative path)
+                if not str(path).startswith('.'):
+                    return "absolute paths not allowed without allowed_dir parameter"
         
         if allowed_extensions:
             if file_path.suffix.lower() not in allowed_extensions:

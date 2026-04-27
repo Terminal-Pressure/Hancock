@@ -198,3 +198,126 @@ class TestConstants:
     def test_valid_siems_frozen(self):
         with pytest.raises(AttributeError):
             VALID_SIEMS.add("new")  # pylint: disable=no-member
+
+
+# ── New Validation Functions ─────────────────────────────────────────────────
+
+class TestValidateIpAddress:
+    """Tests for validate_ip_address function."""
+
+    def test_valid_ipv4(self):
+        from input_validator import validate_ip_address
+        assert validate_ip_address("8.8.8.8") is None
+        assert validate_ip_address("192.168.1.1") is None
+        assert validate_ip_address("0.0.0.0") is None
+
+    def test_valid_ipv6(self):
+        from input_validator import validate_ip_address
+        assert validate_ip_address("::1") is None
+        assert validate_ip_address("2001:db8::1") is None
+        assert validate_ip_address("fe80::1") is None
+
+    def test_invalid_ip(self):
+        from input_validator import validate_ip_address
+        error = validate_ip_address("invalid")
+        assert error is not None
+        assert "invalid IP address" in error
+
+    def test_invalid_ip_format(self):
+        from input_validator import validate_ip_address
+        error = validate_ip_address("256.256.256.256")
+        assert error is not None
+
+
+class TestValidateUrl:
+    """Tests for validate_url function."""
+
+    def test_valid_https_url(self):
+        from input_validator import validate_url
+        assert validate_url("https://example.com") is None
+        assert validate_url("https://example.com/path") is None
+
+    def test_valid_http_url(self):
+        from input_validator import validate_url
+        assert validate_url("http://example.com") is None
+
+    def test_invalid_scheme(self):
+        from input_validator import validate_url
+        error = validate_url("ftp://example.com")
+        assert error is not None
+        assert "scheme" in error
+
+    def test_missing_scheme(self):
+        from input_validator import validate_url
+        error = validate_url("example.com")
+        assert error is not None
+        assert "scheme" in error
+
+    def test_missing_domain(self):
+        from input_validator import validate_url
+        error = validate_url("https://")
+        assert error is not None
+        assert "domain" in error
+
+    def test_custom_allowed_schemes(self):
+        from input_validator import validate_url
+        assert validate_url("ftp://example.com", allowed_schemes=["ftp", "sftp"]) is None
+
+
+class TestValidateFilePath:
+    """Tests for validate_file_path function."""
+
+    def test_relative_path(self):
+        from input_validator import validate_file_path
+        assert validate_file_path("./file.txt") is None
+        assert validate_file_path("./dir/file.txt") is None
+
+    def test_allowed_extensions(self):
+        from input_validator import validate_file_path
+        # Use ./ prefix for relative paths
+        assert validate_file_path("./file.json", allowed_extensions=[".json", ".txt"]) is None
+        error = validate_file_path("./file.exe", allowed_extensions=[".json", ".txt"])
+        assert error is not None
+        assert "extension" in error
+
+    def test_must_exist(self):
+        from input_validator import validate_file_path
+        import tempfile
+        import os
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Use a path that is within allowed_dir but doesn't exist
+            nonexistent = os.path.join(tmpdir, "nonexistent_file.txt")
+            error = validate_file_path(nonexistent, must_exist=True, allowed_dir=tmpdir)
+            assert error is not None
+            assert "does not exist" in error
+
+    def test_allowed_dir(self):
+        from input_validator import validate_file_path
+        import tempfile
+        import os
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = os.path.join(tmpdir, "test.txt")
+            with open(test_file, "w") as f:
+                f.write("test")
+            
+            # File within allowed_dir should pass
+            assert validate_file_path(test_file, allowed_dir=tmpdir) is None
+
+    def test_path_outside_allowed_dir(self):
+        from input_validator import validate_file_path
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Path outside allowed_dir should fail
+            error = validate_file_path("/etc/passwd", allowed_dir=tmpdir)
+            assert error is not None
+            assert "must be within" in error
+
+    def test_bare_filename_rejected(self):
+        """Bare filenames without ./ prefix are rejected for security."""
+        from input_validator import validate_file_path
+        error = validate_file_path("file.txt")
+        assert error is not None
+        assert "absolute" in error

@@ -10,11 +10,19 @@ from typing import Dict, Any, List
 
 CONV_HISTORY: deque = deque(maxlen=10)
 
-# Validation constants
-VALID_MODES = {"auto", "pentest", "exploit", "ciso", "soc", "forensics", "compliance"}
-VALID_SIEMS = {"splunk", "elastic", "sentinel", "chronicle", "sumologic", "qradar"}
-VALID_IOC_TYPES = {"ipv4", "ipv6", "domain", "url", "email", "md5", "sha1", "sha256", "cve", "unknown"}
-VALID_CISO_OUTPUTS = {"report", "summary", "dashboard", "metrics"}
+# Validation constants - using frozenset for immutability
+VALID_MODES = frozenset({"auto", "pentest", "exploit", "ciso", "soc", "forensics", "compliance"})
+VALID_SIEMS = frozenset({"splunk", "elastic", "sentinel", "chronicle", "sumologic", "qradar"})
+VALID_IOC_TYPES = frozenset({"ipv4", "ipv6", "domain", "url", "email", "md5", "sha1", "sha256", "cve", "unknown"})
+VALID_CISO_OUTPUTS = frozenset({"report", "summary", "dashboard", "metrics"})
+
+# Default max lengths for common fields
+DEFAULT_MAX_LENGTHS = {
+    "mode": 50,
+    "alert": 20_000,
+    "prompt": 10_000,
+    "question": 10_000,
+}
 
 
 def detect_ioc_type(ioc: str) -> str:
@@ -70,76 +78,105 @@ def detect_ioc_type(ioc: str) -> str:
     return "unknown"
 
 
-def validate_payload(payload: Dict[str, Any], required: List[str] = None) -> List[str]:
-    """Validate a payload dictionary for required fields.
+def validate_payload(payload: Dict[str, Any], required: List[str] = None, max_lengths: Dict[str, int] = None) -> List[str]:
+    """Validate a payload dictionary for required fields and length constraints.
     
     Args:
         payload: The payload dictionary to validate
         required: List of required field names
+        max_lengths: Dictionary mapping field names to their maximum lengths
         
     Returns:
         List of validation error messages (empty if valid)
     """
     errors = []
     required = required or []
+    max_lengths = max_lengths or {}
+    
+    # Merge with default max lengths
+    effective_max_lengths = {**DEFAULT_MAX_LENGTHS, **max_lengths}
     
     if not isinstance(payload, dict):
-        errors.append("Payload must be a dictionary")
+        errors.append("request body must be a JSON object")
         return errors
     
+    # Check required fields
     for field in required:
         if field not in payload:
-            errors.append(f"Missing required field: {field}")
+            errors.append(f"{field} is required")
+        else:
+            value = payload[field]
+            # Check for empty strings (whitespace only)
+            if isinstance(value, str) and not value.strip():
+                errors.append(f"{field} is required")
+            # Check for empty lists
+            elif isinstance(value, list) and len(value) == 0:
+                errors.append(f"{field} is required")
+    
+    # Check max lengths
+    for field, max_length in effective_max_lengths.items():
+        if field in payload:
+            value = payload[field]
+            if isinstance(value, str) and len(value) > max_length:
+                errors.append(f"{field} exceeds maximum length of {max_length}")
     
     return errors
 
 
-def validate_mode(mode: str) -> bool:
+def validate_mode(mode: str) -> str | None:
     """Validate that mode is in the allowed set.
     
     Args:
         mode: The mode string to validate
         
     Returns:
-        True if valid, False otherwise
+        None if valid, error message if invalid
     """
-    return mode in VALID_MODES
+    if mode in VALID_MODES:
+        return None
+    return f"invalid mode: {mode}"
 
 
-def validate_siem(siem: str) -> bool:
+def validate_siem(siem: str) -> str | None:
     """Validate that SIEM is in the allowed set.
     
     Args:
         siem: The SIEM string to validate
         
     Returns:
-        True if valid, False otherwise
+        None if valid, error message if invalid
     """
-    return siem in VALID_SIEMS
+    if siem in VALID_SIEMS:
+        return None
+    return f"invalid siem: {siem}"
 
 
-def validate_ioc_type(ioc_type: str) -> bool:
+def validate_ioc_type(ioc_type: str) -> str | None:
     """Validate that IOC type is in the allowed set.
     
     Args:
         ioc_type: The IOC type string to validate
         
     Returns:
-        True if valid, False otherwise
+        None if valid, error message if invalid
     """
-    return ioc_type in VALID_IOC_TYPES
+    if ioc_type in VALID_IOC_TYPES:
+        return None
+    return f"invalid IOC type: {ioc_type}"
 
 
-def validate_ciso_output(output_type: str) -> bool:
+def validate_ciso_output(output_type: str) -> str | None:
     """Validate that CISO output type is in the allowed set.
     
     Args:
         output_type: The output type string to validate
         
     Returns:
-        True if valid, False otherwise
+        None if valid, error message if invalid
     """
-    return output_type in VALID_CISO_OUTPUTS
+    if output_type in VALID_CISO_OUTPUTS:
+        return None
+    return f"invalid output type: {output_type}"
 
 
 def sanitize_string(text: str, max_length: int = 1000) -> str:
@@ -209,12 +246,38 @@ def sanitize_prompt(prompt: str, mode: str = "auto") -> str:
     return prompt.strip()
 
 def validate_output(output: Dict[str, Any]) -> Dict[str, Any]:
-    """LLM02 tie-in: sensitive info redaction."""
+    """LLM02 tie-in: sensitive info redaction.
+    
+    Redacts potentially sensitive information from output data.
+    Only redacts when sensitive keywords appear in context that suggests
+    actual credentials (e.g., "api_key: abc123"), not just the word "key".
+    """
     if not isinstance(output, dict):
         output = {"result": str(output)}
+    
+    # Patterns for sensitive data (more precise matching)
+    sensitive_patterns = [
+        r"password\s*[:=]\s*\S+",
+        r"api[_-]?key\s*[:=]\s*\S+",
+        r"token\s*[:=]\s*\S+",
+        r"secret\s*[:=]\s*\S+",
+        r"credentials\s*[:=]\s*\S+",
+        r"bearer\s+\S+",
+    ]
+    
     for k, v in list(output.items()):
-        if any(secret in str(v).lower() for secret in ["password", "key", "token", "secret", "api_key", "credentials"]):
+        # Check if the key itself suggests sensitive data
+        if k.lower() in {"password", "api_key", "token", "secret", "credentials", "bearer"}:
             output[k] = "[REDACTED_SENSITIVE]"
+            continue
+        
+        # Check if value matches sensitive patterns
+        if isinstance(v, str):
+            for pattern in sensitive_patterns:
+                if re.search(pattern, v.lower()):
+                    output[k] = "[REDACTED_SENSITIVE]"
+                    break
+    
     return output
 
 def check_authorization(state: Dict) -> bool:

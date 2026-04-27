@@ -376,19 +376,22 @@ def validate_file_path(path: str, allowed_extensions: List[str] = None, must_exi
                 resolved_path.relative_to(allowed_path)
             except ValueError:
                 return f"path must be within {allowed_dir}"
-        
-        # If no allowed_dir specified, apply general restrictions:
-        # - Relative paths starting with . are OK
-        # - Relative paths without . prefix are OK
-        # - Absolute paths are NOT OK (security risk)
-        # This prevents users from accessing arbitrary system files
-        if not allowed_dir:
-            # Check if the resolved path is absolute AND the original didn't start with .
-            # This catches both Unix absolute paths (/path) and Windows (C:\path)
-            if resolved_path.is_absolute():
-                # Allow if user explicitly used ./ prefix (relative path)
-                if not str(path).startswith('.'):
-                    return "absolute paths not allowed without allowed_dir parameter"
+        else:
+            # If no allowed_dir specified, apply general restrictions:
+            # Require paths to start with ./ AND resolve to a safe location
+            # This prevents tricks like ./../../etc/passwd
+            if not str(path).startswith('.'):
+                return "paths must be relative (start with ./)"
+            
+            # Even for ./ prefixed paths, verify no path traversal
+            # by checking if resolved path contains the original path components
+            # after the ./ prefix in a safe way
+            cwd = Path.cwd().resolve()
+            try:
+                # The resolved path must be within or equal to current working directory
+                resolved_path.relative_to(cwd)
+            except ValueError:
+                return "path traversal not allowed - path must stay within working directory"
         
         if allowed_extensions:
             if file_path.suffix.lower() not in allowed_extensions:

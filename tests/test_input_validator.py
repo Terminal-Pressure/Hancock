@@ -320,4 +320,12 @@ class TestValidateFilePath:
         from input_validator import validate_file_path
         error = validate_file_path("file.txt")
         assert error is not None
-        assert "absolute" in error
+        assert "relative" in error or "absolute" in error
+
+    def test_path_traversal_with_prefix(self):
+        """Paths that start with ./ but traverse outside cwd are rejected."""
+        from input_validator import validate_file_path
+        # Try to use path traversal even with ./ prefix
+        error = validate_file_path("./../../etc/passwd")
+        assert error is not None
+        assert "traversal" in error or "within" in error

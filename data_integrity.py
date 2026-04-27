@@ -44,8 +44,9 @@ def compute_sha256(file_path: str, use_cache: bool = True) -> str:
     if use_cache and file_path in _hash_cache:
         cached_hash, cached_time = _hash_cache[file_path]
         if time.time() - cached_time < CACHE_TTL:
-            # Verify file hasn't been modified
-            if file_path_obj.stat().st_mtime <= cached_time:
+            # Verify file hasn't been modified - use < to ensure cache is
+            # invalidated if file modification time equals or exceeds cache time
+            if file_path_obj.stat().st_mtime < cached_time:
                 logger.debug(f"Using cached hash for {file_path}")
                 return cached_hash
 

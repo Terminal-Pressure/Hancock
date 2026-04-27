@@ -115,7 +115,7 @@ def scan_for_secrets() -> list[dict]:
                 line_lower = line.lower()
                 if any(fp.lower() in line_lower for fp in FALSE_POSITIVE_PATTERNS):
                     continue
-                    
+
                 if pattern.search(line):
                     # Store only non-sensitive metadata.
                     # file path and line number are not secret;

@@ -69,7 +69,8 @@ def optimize_isolation_forest(X: np.ndarray, y: np.ndarray) -> Tuple[IsolationFo
                 best_score = score
                 best_params = params
                 best_model = model
-        except:
+        except (ValueError, RuntimeError) as e:
+            # Skip invalid parameter combinations
             continue
 
     print(f"✅ Best IsolationForest AUC: {best_score:.4f}")
@@ -108,7 +109,8 @@ def optimize_one_class_svm(X: np.ndarray, y: np.ndarray) -> Tuple[OneClassSVM, D
                 best_score = score
                 best_params = params
                 best_model = model
-        except:
+        except (ValueError, RuntimeError) as e:
+            # Skip invalid parameter combinations
             continue
 
     print(f"✅ Best OneClassSVM AUC: {best_score:.4f}")
@@ -151,7 +153,8 @@ def find_optimal_ensemble_weights(
                     if auc > best_auc:
                         best_auc = auc
                         best_weights = weights
-                except:
+                except (ValueError, RuntimeError) as e:
+                    # Skip invalid weight combinations
                     continue
 
     weight_dict = {name: float(w) for name, w in zip(model_names, best_weights)}

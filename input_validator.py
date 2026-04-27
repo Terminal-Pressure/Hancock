@@ -5,8 +5,11 @@ Also includes input validation utilities for IOCs, modes, and other parameters.
 """
 import re
 import math
+import logging
 from collections import deque
 from typing import Dict, Any, List
+
+logger = logging.getLogger(__name__)
 
 CONV_HISTORY: deque = deque(maxlen=10)
 
@@ -234,13 +237,16 @@ def sanitize_prompt(prompt: str, mode: str = "auto") -> str:
     # 1. Zero-day anomaly check (unknown bypasses)
     score = anomaly_score(prompt)
     if score > 0.65:
-        print(f"🛡️ LLM01 ZERO-DAY ANOMALY DETECTED (score: {score:.2f})")
+        alert_msg = f"🛡️ LLM01 ZERO-DAY ANOMALY DETECTED (score: {score:.2f})"
+        logger.warning(alert_msg)
+        print(alert_msg)
         return "[LLM01_ZERO_DAY_BYPASS_DETECTED]"
 
     # 2. Existing recursive encoding, role-play, multi-turn, etc.
     # ... (previous logic remains unchanged)
 
     if prompt != original:
+        logger.info(f"🛡️ LLM01 sanitized: {len(original)} → {len(prompt)} chars")
         print(f"🛡️ LLM01 sanitized: {len(original)} → {len(prompt)} chars")
     return prompt.strip()
 
@@ -280,8 +286,97 @@ def validate_output(output: Dict[str, Any]) -> Dict[str, Any]:
     return output
 
 def check_authorization(state: Dict) -> bool:
-    """LLM06 tie-in."""
+    """LLM06 tie-in - check if high-risk actions are authorized.
+    
+    Args:
+        state: State dictionary containing mode, confidence, and authorization
+        
+    Returns:
+        True if authorized
+        
+    Raises:
+        PermissionError: If high-risk action lacks authorization
+    """
     high_risk = {"pentest", "exploit", "google"}
     if state.get("mode") in high_risk and (state.get("confidence", 0) < 0.9 or not state.get("authorized")):
-        raise PermissionError("High-risk action requires explicit authorization (confidence < 0.9)")
+        error_msg = "High-risk action requires explicit authorization (confidence < 0.9)"
+        logger.warning(f"Authorization check failed: {error_msg}")
+        raise PermissionError(error_msg)
     return True
+
+
+def validate_ip_address(ip: str) -> str | None:
+    """Validate an IP address (IPv4 or IPv6).
+    
+    Args:
+        ip: IP address string to validate
+        
+    Returns:
+        None if valid, error message if invalid
+    """
+    import ipaddress
+    try:
+        ipaddress.ip_address(ip)
+        return None
+    except ValueError:
+        return f"invalid IP address: {ip}"
+
+
+def validate_url(url: str, allowed_schemes: List[str] = None) -> str | None:
+    """Validate a URL.
+    
+    Args:
+        url: URL string to validate
+        allowed_schemes: List of allowed URL schemes (defaults to ['http', 'https'])
+        
+    Returns:
+        None if valid, error message if invalid
+    """
+    from urllib.parse import urlparse
+    
+    allowed_schemes = allowed_schemes or ['http', 'https']
+    
+    try:
+        parsed = urlparse(url)
+        if not parsed.scheme:
+            return "URL must have a scheme (http:// or https://)"
+        if parsed.scheme not in allowed_schemes:
+            return f"URL scheme must be one of: {', '.join(allowed_schemes)}"
+        if not parsed.netloc:
+            return "URL must have a domain"
+        return None
+    except Exception as e:
+        return f"invalid URL: {e}"
+
+
+def validate_file_path(path: str, allowed_extensions: List[str] = None, must_exist: bool = False) -> str | None:
+    """Validate a file path for security.
+    
+    Args:
+        path: File path to validate
+        allowed_extensions: List of allowed file extensions (e.g., ['.json', '.txt'])
+        must_exist: Whether the file must exist
+        
+    Returns:
+        None if valid, error message if invalid
+    """
+    from pathlib import Path
+    
+    # Check for path traversal attempts
+    if '..' in path or path.startswith('/'):
+        return "path traversal not allowed"
+    
+    try:
+        file_path = Path(path)
+        
+        if allowed_extensions:
+            if file_path.suffix.lower() not in allowed_extensions:
+                return f"file extension must be one of: {', '.join(allowed_extensions)}"
+        
+        if must_exist and not file_path.exists():
+            return f"file does not exist: {path}"
+        
+        return None
+    except Exception as e:
+        return f"invalid file path: {e}"
+

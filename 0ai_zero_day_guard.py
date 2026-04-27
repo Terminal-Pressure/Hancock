@@ -8,11 +8,14 @@ import json
 import time
 import hashlib
 import joblib
+import logging
 from pathlib import Path
 from collections import deque, Counter
 from typing import Dict, Any
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
+
+logger = logging.getLogger(__name__)
 
 KNOWLEDGE_BASE = Path("data/zero_day_knowledge.jsonl")
 MODEL_PATH = Path("data/0ai_zero_day_model.joblib")
@@ -67,7 +70,6 @@ MODEL, SCALER = train_or_load_model()
 
 def detect_zero_day_ensemble(prompt: str, mode: str = "auto") -> str:
     """Main 0ai ML-based Zero-Day Guard."""
-    global CONV_HISTORY
     CONV_HISTORY.append(prompt.lower())
     
     features = extract_features(prompt)
@@ -76,7 +78,9 @@ def detect_zero_day_ensemble(prompt: str, mode: str = "auto") -> str:
     
     if anomaly_score < -0.15:   # tunable threshold
         confidence = int(100 * (1 - (anomaly_score + 0.5)))
-        print(f"🚨 0ai Zero-Day Guard ML ALERT: LLM01 zero-day detected (confidence {confidence}%)")
+        alert_msg = f"🚨 0ai Zero-Day Guard ML ALERT: LLM01 zero-day detected (confidence {confidence}%)"
+        logger.warning(alert_msg)
+        print(alert_msg)  # Keep CLI output for user visibility
         # Self-learn
         with KNOWLEDGE_BASE.open("a") as f:
             f.write(json.dumps({
@@ -116,7 +120,6 @@ LOF_MODEL = train_lof_model()
 
 def detect_zero_day_ensemble_ensemble(prompt: str, mode: str = "auto") -> str:
     """Ensemble: IsolationForest + LOF for maximum zero-day coverage."""
-    global CONV_HISTORY
     CONV_HISTORY.append(prompt.lower())
     
     features = extract_features(prompt)
@@ -131,7 +134,9 @@ def detect_zero_day_ensemble_ensemble(prompt: str, mode: str = "auto") -> str:
     confidence = int(100 * (1 - (if_score + lof_score + 1) / 2))
     
     if confidence >= 70:
-        print(f"🚨 0ai Zero-Day Guard ENSEMBLE ALERT: LLM01 zero-day detected (confidence {confidence}%)")
+        alert_msg = f"🚨 0ai Zero-Day Guard ENSEMBLE ALERT: LLM01 zero-day detected (confidence {confidence}%)"
+        logger.warning(alert_msg)
+        print(alert_msg)  # Keep CLI output for user visibility
         with KNOWLEDGE_BASE.open("a") as f:
             f.write(json.dumps({
                 "timestamp": time.time(),

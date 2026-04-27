@@ -71,6 +71,7 @@ def optimize_isolation_forest(X: np.ndarray, y: np.ndarray) -> Tuple[IsolationFo
                 best_model = model
         except (ValueError, RuntimeError) as e:
             # Skip invalid parameter combinations
+            logger.debug(f"Skipped params {params}: {e}")
             continue
 
     print(f"✅ Best IsolationForest AUC: {best_score:.4f}")
@@ -111,6 +112,7 @@ def optimize_one_class_svm(X: np.ndarray, y: np.ndarray) -> Tuple[OneClassSVM, D
                 best_model = model
         except (ValueError, RuntimeError) as e:
             # Skip invalid parameter combinations
+            logger.debug(f"Skipped params {params}: {e}")
             continue
 
     print(f"✅ Best OneClassSVM AUC: {best_score:.4f}")
@@ -155,6 +157,7 @@ def find_optimal_ensemble_weights(
                         best_weights = weights
                 except (ValueError, RuntimeError) as e:
                     # Skip invalid weight combinations
+                    logger.debug(f"Skipped weights {weights}: {e}")
                     continue
 
     weight_dict = {name: float(w) for name, w in zip(model_names, best_weights)}
@@ -199,32 +202,6 @@ def evaluate_model_performance(
         "fpr_at_best": float(fpr[best_idx]),
         "f1_at_best": float(f1)
     }
-
-
-def plot_comparative_roc(results: List[Dict], save_path: str = "hancock_zeroday_roc.png"):
-    """Plot comparative ROC curves for all models.
-
-    Args:
-        results: List of result dictionaries from evaluate_model_performance
-        save_path: Path to save the plot
-    """
-    plt.figure(figsize=(10, 8))
-    colors = ['blue', 'green', 'red', 'purple']
-
-    for i, result in enumerate(results):
-        # Note: We need to recalculate FPR/TPR for plotting
-        # This is a simplified version - in practice, store these in results
-        plt.plot([0, 1], [0, 1], '--', lw=1, color='gray', alpha=0.5)
-
-    plt.xlabel("False Positive Rate", fontsize=12)
-    plt.ylabel("True Positive Rate", fontsize=12)
-    plt.title("Hancock 0ai Zero-Day Guard — Enhanced ROC Curves\n(IsolationForest + OneClassSVM + LOF Ensemble)",
-              fontsize=14, fontweight='bold')
-    plt.grid(True, alpha=0.3)
-    plt.legend(loc="lower right", fontsize=10)
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    print(f"✅ High-res comparative plot saved: {save_path}")
 
 
 def main():

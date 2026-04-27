@@ -106,10 +106,9 @@ def validate_payload(payload: Dict[str, Any], required: List[str] = None, max_le
             errors.append(f"{field} is required")
         else:
             value = payload[field]
-            # Check for empty strings (whitespace only)
+            # Check for empty strings (whitespace only) or empty lists
             if isinstance(value, str) and not value.strip():
                 errors.append(f"{field} is required")
-            # Check for empty lists
             elif isinstance(value, list) and len(value) == 0:
                 errors.append(f"{field} is required")
     

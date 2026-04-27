@@ -234,17 +234,11 @@ class OrchestrationController:
         if "dataset" in params:
             verify_dataset(params["dataset"])
 
-        # OWASP LLM01 Prompt Injection + LLM02 Sensitive Info Guard
+        # OWASP LLM01 Prompt Injection + LLM06 Authorization
         if "prompt" in params or "question" in params:
             key = "prompt" if "prompt" in params else "question"
             params[key] = sanitize_prompt(params[key], tool_name)
         check_authorization({"mode": tool_name, "confidence": 0.95, "authorized": True})
-
-        # OWASP LLM01 + LLM06: Sanitize prompt & enforce authorization
-        if "prompt" in params:
-            params["prompt"] = sanitize_prompt(params["prompt"])
-        check_authorization({"mode": tool_name, "confidence": 0.95, "authorized": True})
-
 
         # Access control
         if not self.is_tool_allowed(tool_name):

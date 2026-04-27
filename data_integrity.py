@@ -165,6 +165,5 @@ def clear_hash_cache() -> None:
 
     Useful when you know files have been modified and want to force recomputation.
     """
-    global _hash_cache
     _hash_cache.clear()
     logger.info("Hash cache cleared")

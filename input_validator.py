@@ -1,13 +1,167 @@
 """
 Hancock OWASP LLM01 Zero-Day Prompt Injection Guard
 Recursive encoding + role-play + multi-turn + ANOMALY DETECTION for unknown bypasses
+Also includes input validation utilities for IOCs, modes, and other parameters.
 """
 import re
 import math
 from collections import deque
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 CONV_HISTORY: deque = deque(maxlen=10)
+
+# Validation constants
+VALID_MODES = {"auto", "pentest", "exploit", "ciso", "soc", "forensics", "compliance"}
+VALID_SIEMS = {"splunk", "elastic", "sentinel", "chronicle", "sumologic", "qradar"}
+VALID_IOC_TYPES = {"ipv4", "ipv6", "domain", "url", "email", "md5", "sha1", "sha256", "cve", "unknown"}
+VALID_CISO_OUTPUTS = {"report", "summary", "dashboard", "metrics"}
+
+
+def detect_ioc_type(ioc: str) -> str:
+    """Detect the type of an Indicator of Compromise (IOC).
+    
+    Args:
+        ioc: The IOC string to analyze
+        
+    Returns:
+        The detected IOC type (ipv4, ipv6, domain, url, email, md5, sha1, sha256, cve, unknown)
+    """
+    ioc = ioc.strip()
+    
+    if not ioc:
+        return "unknown"
+    
+    # URL
+    if re.match(r"^https?://", ioc, re.IGNORECASE):
+        return "url"
+    
+    # CVE
+    if re.match(r"^cve-\d{4}-\d{4,}$", ioc, re.IGNORECASE):
+        return "cve"
+    
+    # Email
+    if re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", ioc):
+        return "email"
+    
+    # IPv4
+    if re.match(r"^(\d{1,3}\.){3}\d{1,3}$", ioc):
+        return "ipv4"
+    
+    # IPv6 (simplified pattern)
+    if re.match(r"^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(%\w+)?$", ioc):
+        return "ipv6"
+    
+    # MD5 (32 hex chars)
+    if re.match(r"^[a-fA-F0-9]{32}$", ioc):
+        return "md5"
+    
+    # SHA1 (40 hex chars)
+    if re.match(r"^[a-fA-F0-9]{40}$", ioc):
+        return "sha1"
+    
+    # SHA256 (64 hex chars)
+    if re.match(r"^[a-fA-F0-9]{64}$", ioc):
+        return "sha256"
+    
+    # Domain (basic check - contains dot and looks like domain)
+    if re.match(r"^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$", ioc):
+        return "domain"
+    
+    return "unknown"
+
+
+def validate_payload(payload: Dict[str, Any], required: List[str] = None) -> List[str]:
+    """Validate a payload dictionary for required fields.
+    
+    Args:
+        payload: The payload dictionary to validate
+        required: List of required field names
+        
+    Returns:
+        List of validation error messages (empty if valid)
+    """
+    errors = []
+    required = required or []
+    
+    if not isinstance(payload, dict):
+        errors.append("Payload must be a dictionary")
+        return errors
+    
+    for field in required:
+        if field not in payload:
+            errors.append(f"Missing required field: {field}")
+    
+    return errors
+
+
+def validate_mode(mode: str) -> bool:
+    """Validate that mode is in the allowed set.
+    
+    Args:
+        mode: The mode string to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    return mode in VALID_MODES
+
+
+def validate_siem(siem: str) -> bool:
+    """Validate that SIEM is in the allowed set.
+    
+    Args:
+        siem: The SIEM string to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    return siem in VALID_SIEMS
+
+
+def validate_ioc_type(ioc_type: str) -> bool:
+    """Validate that IOC type is in the allowed set.
+    
+    Args:
+        ioc_type: The IOC type string to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    return ioc_type in VALID_IOC_TYPES
+
+
+def validate_ciso_output(output_type: str) -> bool:
+    """Validate that CISO output type is in the allowed set.
+    
+    Args:
+        output_type: The output type string to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    return output_type in VALID_CISO_OUTPUTS
+
+
+def sanitize_string(text: str, max_length: int = 1000) -> str:
+    """Sanitize a string by removing potentially dangerous characters.
+    
+    Args:
+        text: The text to sanitize
+        max_length: Maximum allowed length
+        
+    Returns:
+        Sanitized string
+    """
+    if not isinstance(text, str):
+        text = str(text)
+    
+    # Truncate to max length
+    text = text[:max_length]
+    
+    # Remove null bytes and other control characters
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    
+    return text.strip()
 
 def shannon_entropy(text: str) -> float:
     """Calculate Shannon entropy to detect highly random/encoded payloads (zero-day indicator)."""
@@ -34,7 +188,6 @@ def anomaly_score(prompt: str) -> float:
 
 def sanitize_prompt(prompt: str, mode: str = "auto") -> str:
     """Full LLM01 guard with zero-day anomaly detection."""
-    global CONV_HISTORY
     original = prompt
     max_len = 4000 if mode in {"pentest", "exploit"} else 2000
     if len(prompt) > max_len:

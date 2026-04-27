@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from collectors.registry import build_default_registry
+from supply_chain_guard import generate_sbom, run_trivy_scan, sign_model, generate_manifest
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -51,14 +52,14 @@ def run_ghsa(data_dir: Path = DATA_DIR) -> None:
     run_collector("ghsa", data_dir)
 
 
-def run_formatter_v3()
-generate_sbom()
-run_trivy_scan()
-generate_manifest()
-    sign_model(\"hancock-cpu-adapter/\")
-    sign_model(\"data/\") -> None:
+def run_formatter_v3() -> None:
     """Format all v3 data sources into hancock_v3.jsonl."""
     run_collector("formatter-v3")
+    generate_sbom()
+    run_trivy_scan()
+    generate_manifest()
+    sign_model("hancock-cpu-adapter/")
+    sign_model("data/")
 
 
 def run_kb(data_dir: Path = DATA_DIR) -> None:

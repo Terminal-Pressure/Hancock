@@ -10,3 +10,4 @@ pytest
 maxminddb
 python-nmap
 atheris
+pyyaml

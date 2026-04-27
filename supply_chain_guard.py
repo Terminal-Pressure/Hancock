@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Dict
 
-from data_integrity import compute_sha256
+from data_integrity import compute_sha256, verify_dataset as _verify_dataset_integrity
 
 logger = logging.getLogger(__name__)
 
@@ -53,13 +53,53 @@ def run_trivy_scan() -> bool:
         raise RuntimeError(error_msg) from e
 
 def verify_hf_model(model_id: str) -> bool:
-    """Verify HF model snapshot integrity (checksum manifest)."""
+    """Verify HF model snapshot integrity (checksum manifest).
+    
+    Args:
+        model_id: HuggingFace model identifier (e.g., 'nvidia/Llama-3.1-Nemotron-70B-Instruct-HF')
+    
+    Returns:
+        True if verification passes
+        
+    Notes:
+        In production, this would:
+        1. Download model manifest from trusted registry
+        2. Verify GPG signature of manifest
+        3. Compare file hashes against manifest
+        4. Check model against known compromised models list
+        
+        Current implementation is a stub that logs verification attempt.
+    """
     logger.info(f"🛡️  Verifying HF model {model_id} (LLM03)...")
     print(f"🛡️  Verifying HF model {model_id} (LLM03)...")
-    # In production this would pull from a signed manifest; stub for now
+    
+    # TODO: Implement full verification in production
+    # - Fetch manifest from secure registry
+    # - Verify GPG signature
+    # - Validate all file checksums
+    # - Check against CVE/advisory databases
+    
     logger.info(f"✅ HF model {model_id} verified")
     print(f"✅ HF model {model_id} verified")
     return True
+
+
+def verify_dataset(dataset_path: str) -> bool:
+    """Verify dataset integrity via LLM04 data poisoning protection.
+    
+    This is a convenience wrapper around data_integrity.verify_dataset()
+    to provide unified supply chain verification interface.
+    
+    Args:
+        dataset_path: Path to the dataset file to verify
+        
+    Returns:
+        True if verification passes
+        
+    Raises:
+        RuntimeError: If dataset verification fails (poisoning detected)
+    """
+    return _verify_dataset_integrity(dataset_path)
 
 # ── LLM03 Model Signing (GPG detached signatures) ───────────────────────────
 GPG_KEY_ID = "0ai-Cyberviser"  # Change to your real GPG key ID if needed

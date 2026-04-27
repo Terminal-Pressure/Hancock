@@ -349,31 +349,45 @@ def validate_url(url: str, allowed_schemes: List[str] = None) -> str | None:
         return f"invalid URL: {e}"
 
 
-def validate_file_path(path: str, allowed_extensions: List[str] = None, must_exist: bool = False) -> str | None:
+def validate_file_path(path: str, allowed_extensions: List[str] = None, must_exist: bool = False, allowed_dir: str = None) -> str | None:
     """Validate a file path for security.
     
     Args:
         path: File path to validate
         allowed_extensions: List of allowed file extensions (e.g., ['.json', '.txt'])
         must_exist: Whether the file must exist
+        allowed_dir: Optional base directory - path must be within this directory
         
     Returns:
         None if valid, error message if invalid
     """
     from pathlib import Path
     
-    # Check for path traversal attempts
-    if '..' in path or path.startswith('/'):
-        return "path traversal not allowed"
-    
     try:
         file_path = Path(path)
+        
+        # Resolve to absolute path to prevent traversal tricks
+        resolved_path = file_path.resolve()
+        
+        # Check if path is within allowed directory
+        if allowed_dir:
+            allowed_path = Path(allowed_dir).resolve()
+            try:
+                resolved_path.relative_to(allowed_path)
+            except ValueError:
+                return f"path must be within {allowed_dir}"
+        
+        # Check for absolute paths if no allowed_dir specified
+        if not allowed_dir and resolved_path.is_absolute() and not str(path).startswith('.'):
+            # Allow absolute paths only if explicitly starting with /
+            if not str(path).startswith('/') and not (len(str(path)) > 1 and str(path)[1] == ':'):
+                return "absolute paths not allowed"
         
         if allowed_extensions:
             if file_path.suffix.lower() not in allowed_extensions:
                 return f"file extension must be one of: {', '.join(allowed_extensions)}"
         
-        if must_exist and not file_path.exists():
+        if must_exist and not resolved_path.exists():
             return f"file does not exist: {path}"
         
         return None

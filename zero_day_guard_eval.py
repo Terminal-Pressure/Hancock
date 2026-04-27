@@ -53,7 +53,8 @@ def optimize_isolation_forest(X: np.ndarray, y: np.ndarray) -> Tuple[IsolationFo
     Returns:
         Tuple of (best model, best parameters)
     """
-    print("\n🔍 Optimizing IsolationForest hyperparameters...")
+    logger.info("🔍 Optimizing IsolationForest hyperparameters...")
+    print("🔍 Optimizing IsolationForest hyperparameters...")
     param_grid = {
         'contamination': [0.03, 0.05, 0.07],
         'n_estimators': [100, 200, 300],
@@ -94,7 +95,8 @@ def optimize_one_class_svm(X: np.ndarray, y: np.ndarray) -> Tuple[OneClassSVM, D
     Returns:
         Tuple of (best model, best parameters)
     """
-    print("\n🔍 Optimizing OneClassSVM hyperparameters...")
+    logger.info("🔍 Optimizing OneClassSVM hyperparameters...")
+    print("🔍 Optimizing OneClassSVM hyperparameters...")
     param_grid = {
         'kernel': ['rbf', 'sigmoid'],
         'nu': [0.03, 0.05, 0.07],
@@ -140,7 +142,8 @@ def find_optimal_ensemble_weights(
     Returns:
         Tuple of (optimal weights dict, best AUC score)
     """
-    print("\n🔍 Optimizing ensemble weights...")
+    logger.info("🔍 Optimizing ensemble weights...")
+    print("🔍 Optimizing ensemble weights...")
     best_weights = None
     best_auc = -1
 

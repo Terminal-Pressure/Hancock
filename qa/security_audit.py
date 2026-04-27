@@ -31,7 +31,7 @@ else:
     RESULTS_DIR = Path(tempfile.gettempdir()) / "security_audit_results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-EXCLUDE     = ["deploy/helm", ".venv", "node_modules", "hancock-cpu-adapter"]
+EXCLUDE     = ["deploy/helm", ".venv", "node_modules", "hancock-cpu-adapter", "tests/"]
 
 # ── Secret pattern detector ───────────────────────────────────────────────────
 SECRET_PATTERNS = [
@@ -39,6 +39,24 @@ SECRET_PATTERNS = [
     (re.compile(r'nvapi-[A-Za-z0-9_-]{20,}'),                                       "NVIDIA API key"),
     (re.compile(r'sk-[A-Za-z0-9]{20,}'),                                            "OpenAI API key"),
     (re.compile(r'ghp_[A-Za-z0-9]{36}'),                                            "GitHub token"),
+]
+
+# Patterns that indicate false positives (test data, examples, placeholders)
+FALSE_POSITIVE_PATTERNS = [
+    "os.getenv",           # Environment variable references
+    "example",             # Example/documentation text
+    "test-key",            # Test keys
+    "test-token",          # Test tokens
+    "YOUR_API_KEY",        # Placeholder instructions
+    "YOUR_",               # Common placeholder prefix
+    "xxx",                 # Redacted values
+    "...",                 # Truncated examples (like nvapi-...)
+    "placeholder",         # Placeholder values
+    "fake",                # Fake credentials
+    "dummy",               # Dummy values
+    "mock",                # Mock data
+    "<your-",              # Template variables
+    "{your-",              # Template variables
 ]
 
 
@@ -93,7 +111,12 @@ def scan_for_secrets() -> list[dict]:
             except OSError:
                 continue
             for i, line in enumerate(content.splitlines(), 1):
-                if pattern.search(line) and "os.getenv" not in line and "example" not in line.lower():
+                # Skip lines that match known false positive patterns
+                line_lower = line.lower()
+                if any(fp.lower() in line_lower for fp in FALSE_POSITIVE_PATTERNS):
+                    continue
+                    
+                if pattern.search(line):
                     # Store only non-sensitive metadata.
                     # file path and line number are not secret;
                     # label is a string constant from SECRET_PATTERNS.

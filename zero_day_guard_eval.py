@@ -4,6 +4,7 @@ Hancock 0ai Zero-Day Guard — AUC-ROC Evaluator + Best Threshold Finder
 Enhanced with OneClassSVM and hyperparameter optimization
 Run on Kali: python zero_day_guard_eval.py
 """
+import logging
 import numpy as np
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
@@ -15,6 +16,10 @@ import json
 from pathlib import Path
 from typing import Dict, Tuple, List
 import time
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
 
 np.random.seed(42)
 

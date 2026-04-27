@@ -1,0 +1,77 @@
+{
+  "timestamp": "2026-04-27T16:10:40Z",
+  "file_stats": [
+    {
+      "file": "hancock_agent.py",
+      "total_lines": 1394,
+      "code_lines": 1214,
+      "comment_lines": 25,
+      "blank_lines": 155
+    },
+    {
+      "file": "hancock_constants.py",
+      "total_lines": 63,
+      "code_lines": 33,
+      "comment_lines": 10,
+      "blank_lines": 20
+    },
+    {
+      "file": "monitoring/logging_config.py",
+      "total_lines": 204,
+      "code_lines": 143,
+      "comment_lines": 17,
+      "blank_lines": 44
+    },
+    {
+      "file": "monitoring/metrics_exporter.py",
+      "total_lines": 178,
+      "code_lines": 128,
+      "comment_lines": 9,
+      "blank_lines": 41
+    },
+    {
+      "file": "monitoring/health_check.py",
+      "total_lines": 174,
+      "code_lines": 131,
+      "comment_lines": 10,
+      "blank_lines": 33
+    },
+    {
+      "file": "monitoring/prometheus_dashboard.py",
+      "total_lines": 266,
+      "code_lines": 221,
+      "comment_lines": 13,
+      "blank_lines": 32
+    },
+    {
+      "file": "deploy/startup_checks.py",
+      "total_lines": 131,
+      "code_lines": 104,
+      "comment_lines": 1,
+      "blank_lines": 26
+    },
+    {
+      "file": "deploy/graceful_shutdown.py",
+      "total_lines": 129,
+      "code_lines": 97,
+      "comment_lines": 1,
+      "blank_lines": 31
+    }
+  ],
+  "lint": {
+    "issues": 0,
+    "returncode": 0,
+    "output": ""
+  },
+  "tests": {
+    "tests_collected": 0,
+    "returncode": 0
+  },
+  "summary": {
+    "total_source_files": 8,
+    "total_lines": 2539,
+    "total_code_lines": 2071,
+    "lint_issues": 0,
+    "lint_passed": true
+  }
+}
